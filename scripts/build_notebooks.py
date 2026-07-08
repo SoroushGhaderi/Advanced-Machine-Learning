@@ -367,9 +367,23 @@ def n00() -> list[dict]:
             """
             ### Minimum quality contract
 
-            Catalog descriptions are promises, not evidence. A useful catalog links each important
-            promise to a check. For this snapshot we require a binary, non-null target; plausible ages;
-            valid calendar fields; and the documented `pdays` sentinel.
+            Catalog descriptions are promises, not evidence. A useful catalog turns each important
+            promise into an explicit check, so we can tell the difference between a trustworthy
+            snapshot and a dataset that only looks clean at first glance.
+
+            For this snapshot, the minimum contract is intentionally small and strict:
+
+            - `y` must be binary and non-null, because the target is the label we train and evaluate
+              against.
+            - `age` must stay in a plausible adult range, so obvious data-entry errors surface early.
+            - `day` and `month` must form valid calendar fields, because downstream feature logic
+              assumes a real call date.
+            - `pdays` must obey the documented sentinel rule: `-1` means the client was not
+              previously contacted, while non-negative values represent elapsed days since the
+              last campaign contact.
+
+            These checks are not cosmetic. They are the boundary between a dataset we can trust and
+            one we should quarantine before it reaches modeling or reporting.
 
             **Warning:** if a critical rule breaks in production data, the correct response is to fail
             ingestion or quarantine the batch. Do not silently weaken the rule to make a pipeline pass.
