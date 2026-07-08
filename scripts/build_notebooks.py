@@ -236,6 +236,15 @@ COMMON = code(
     """
 )
 
+COMMON_NO_LGBM_WARNING = {
+    **COMMON,
+    "id": uuid.uuid4().hex[:8],
+    "source": COMMON["source"].replace(
+        'warnings.filterwarnings("ignore", message="X does not have valid feature names, but LGBMClassifier")\n',
+        "",
+    ),
+}
+
 
 def n00() -> list[dict]:
     """Build notebook 00: course setup and dataset exploration."""
@@ -2340,16 +2349,16 @@ def n04() -> list[dict]:
             ## Learning objectives
 
             - Translate model-development goals into an Optuna objective.
-            - Design a bounded, reproducible search space for LightGBM.
+            - Design a bounded, reproducible search space for CatBoost.
             - Combine cross-validation, early stopping, and Optuna pruning without leakage.
             - Inspect trials, parameter importance, and optimization history.
             - Promote one tuned candidate to validation without repeatedly optimizing validation.
             """
         ),
-        COMMON,
+        COMMON_NO_LGBM_WARNING,
         code(
             """
-            import lightgbm as lgb
+            from catboost import CatBoostClassifier
             from sklearn.model_selection import StratifiedKFold
             from sklearn.metrics import log_loss
             from src.course_utils import (classification_metrics, load_bank_data, make_preprocessor,
@@ -2358,7 +2367,8 @@ def n04() -> list[dict]:
             development, validation, _sealed_test = make_splits(load_bank_data(), reduced=FAST_MODE)
             X_dev, y_dev = split_xy(development)
             X_val, y_val = split_xy(validation)
-            print("Library versions:", lgb.__version__)
+            import catboost
+            print("Library versions:", catboost.__version__)
             """
         ),
         md(
@@ -2369,7 +2379,7 @@ def n04() -> list[dict]:
             choices: propose parameters, fit a candidate under the same data boundary, observe a metric, and
             use the trial history to choose the next candidate.
 
-            In this notebook the model is LightGBM, but the center of gravity is Optuna:
+            In this notebook the model is CatBoost, but the center of gravity is Optuna:
 
             - the objective returns cross-validated log loss from development data only;
             - each fold owns its own preprocessing and early-stopping split;
@@ -2385,20 +2395,19 @@ def n04() -> list[dict]:
             X_dev_encoded = preprocessor.fit_transform(X_dev, y_dev)
             X_val_encoded = preprocessor.transform(X_val)
 
-            lightgbm_baseline = lgb.LGBMClassifier(
-                objective="binary", n_estimators=1000, learning_rate=0.04,
-                num_leaves=31, min_child_samples=30, subsample=0.9,
-                colsample_bytree=0.9, reg_lambda=1.0, random_state=SEED,
-                n_jobs=-1, verbosity=-1,
+            catboost_baseline = CatBoostClassifier(
+                loss_function="Logloss", eval_metric="Logloss", iterations=1000,
+                learning_rate=0.04, depth=6, min_data_in_leaf=30,
+                l2_leaf_reg=3.0, random_seed=SEED, thread_count=-1,
+                allow_writing_files=False, verbose=False,
             )
-            lightgbm_baseline.fit(
+            catboost_baseline.fit(
                 X_dev_encoded, y_dev, eval_set=[(X_val_encoded, y_val)],
-                eval_metric="binary_logloss",
-                callbacks=[lgb.early_stopping(50, verbose=False)],
+                use_best_model=True, early_stopping_rounds=50, verbose=False,
             )
-            lgb_p = lightgbm_baseline.predict_proba(X_val_encoded)[:, 1]
-            print("LightGBM best iteration:", lightgbm_baseline.best_iteration_)
-            pd.Series(classification_metrics(y_val, lgb_p), name="untuned LightGBM")
+            cat_p = catboost_baseline.predict_proba(X_val_encoded)[:, 1]
+            print("CatBoost best iteration:", catboost_baseline.get_best_iteration())
+            pd.Series(classification_metrics(y_val, cat_p), name="untuned CatBoost")
             """
         ),
         md(
@@ -2418,11 +2427,11 @@ def n04() -> list[dict]:
             | Parameter | Why Optuna tunes it | Bound used here |
             |---|---|---|
             | `learning_rate` | shrinkage/iteration tradeoff | log scale, 0.02–0.12 |
-            | `num_leaves` | tree complexity | 15–63 |
-            | `min_child_samples` | leaf regularization | 20–100 |
+            | `depth` | tree depth and interaction complexity | 4–8 |
+            | `min_data_in_leaf` | leaf regularization | 10–80 |
             | `subsample` | row sampling regularization | 0.70–1.00 |
-            | `colsample_bytree` | feature sampling regularization | 0.70–1.00 |
-            | `reg_alpha`, `reg_lambda` | L1/L2 regularization | log-scaled positive ranges |
+            | `rsm` | feature sampling regularization | 0.70–1.00 |
+            | `l2_leaf_reg`, `random_strength` | regularization and split-score noise | log-scaled positive ranges |
             """
         ),
         code(
@@ -2434,15 +2443,17 @@ def n04() -> list[dict]:
             def objective(trial):
                 # Return development-only cross-validated log loss for one Optuna trial.
                 params = {
-                    "objective": "binary", "verbosity": -1, "n_jobs": -1,
-                    "random_state": SEED, "n_estimators": 800,
+                    "loss_function": "Logloss", "eval_metric": "Logloss",
+                    "thread_count": -1, "random_seed": SEED, "iterations": 800,
+                    "allow_writing_files": False, "verbose": False,
+                    "bootstrap_type": "Bernoulli",
                     "learning_rate": trial.suggest_float("learning_rate", 0.02, 0.12, log=True),
-                    "num_leaves": trial.suggest_int("num_leaves", 15, 63),
-                    "min_child_samples": trial.suggest_int("min_child_samples", 20, 100),
+                    "depth": trial.suggest_int("depth", 4, 8),
+                    "min_data_in_leaf": trial.suggest_int("min_data_in_leaf", 10, 80),
                     "subsample": trial.suggest_float("subsample", 0.7, 1.0),
-                    "colsample_bytree": trial.suggest_float("colsample_bytree", 0.7, 1.0),
-                    "reg_alpha": trial.suggest_float("reg_alpha", 1e-4, 2.0, log=True),
-                    "reg_lambda": trial.suggest_float("reg_lambda", 1e-3, 5.0, log=True),
+                    "rsm": trial.suggest_float("rsm", 0.7, 1.0),
+                    "l2_leaf_reg": trial.suggest_float("l2_leaf_reg", 1e-2, 10.0, log=True),
+                    "random_strength": trial.suggest_float("random_strength", 1e-3, 5.0, log=True),
                 }
                 fold_scores = []
                 for fold, (fit_idx, stop_idx) in enumerate(cv.split(X_dev, y_dev)):
@@ -2451,10 +2462,9 @@ def n04() -> list[dict]:
                     fold_pre = make_preprocessor(development.iloc[fit_idx], scale_numeric=False)
                     X_fit_e = fold_pre.fit_transform(X_fit, y_fit)
                     X_stop_e = fold_pre.transform(X_stop)
-                    model = lgb.LGBMClassifier(**params)
+                    model = CatBoostClassifier(**params)
                     model.fit(X_fit_e, y_fit, eval_set=[(X_stop_e, y_stop)],
-                              eval_metric="binary_logloss",
-                              callbacks=[lgb.early_stopping(35, verbose=False)])
+                              use_best_model=True, early_stopping_rounds=35, verbose=False)
                     fold_scores.append(log_loss(y_stop, model.predict_proba(X_stop_e)[:, 1]))
                     trial.report(float(np.mean(fold_scores)), step=fold)
                     if trial.should_prune():
@@ -2507,17 +2517,17 @@ def n04() -> list[dict]:
         code(
             """
             tuned_params = {
-                **study.best_params, "objective": "binary", "verbosity": -1,
-                "n_jobs": -1, "random_state": SEED, "n_estimators": 1200,
+                **study.best_params, "loss_function": "Logloss", "eval_metric": "Logloss",
+                "thread_count": -1, "random_seed": SEED, "iterations": 1200,
+                "allow_writing_files": False, "verbose": False, "bootstrap_type": "Bernoulli",
             }
-            tuned = lgb.LGBMClassifier(**tuned_params)
+            tuned = CatBoostClassifier(**tuned_params)
             tuned.fit(X_dev_encoded, y_dev, eval_set=[(X_val_encoded, y_val)],
-                      eval_metric="binary_logloss",
-                      callbacks=[lgb.early_stopping(50, verbose=False)])
+                      use_best_model=True, early_stopping_rounds=50, verbose=False)
             tuned_p = tuned.predict_proba(X_val_encoded)[:, 1]
             validation_comparison = pd.DataFrame({
-                "untuned LightGBM": classification_metrics(y_val, lgb_p),
-                "Optuna LightGBM": classification_metrics(y_val, tuned_p),
+                "untuned CatBoost": classification_metrics(y_val, cat_p),
+                "Optuna CatBoost": classification_metrics(y_val, tuned_p),
             }).T
             validation_comparison
             """
@@ -2557,7 +2567,7 @@ def n04() -> list[dict]:
             - [Optuna first optimization](https://optuna.readthedocs.io/en/stable/tutorial/10_key_features/001_first.html)
             - [Optuna efficient optimization](https://optuna.readthedocs.io/en/stable/tutorial/10_key_features/003_efficient_optimization_algorithms.html)
             - [Optuna pruning](https://optuna.readthedocs.io/en/stable/tutorial/10_key_features/003_efficient_optimization_algorithms.html#pruning-algorithms)
-            - [LightGBM Python API](https://lightgbm.readthedocs.io/en/latest/Python-API.html)
+            - [CatBoostClassifier](https://catboost.ai/docs/en/concepts/python-reference_catboostclassifier)
             """
         ),
     ]
