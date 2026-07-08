@@ -294,10 +294,10 @@ baseline زیر از این موارد استفاده می‌کند:
 
 برای مسائل نامتوازن، accuracy به‌تنهایی معمولاً گمراه‌کننده است. ما این‌ها را ترجیح می‌دهیم:
 
-- ROC AUC برای کیفیت رتبه‌بندی،
-- PR AUC برای شناسایی رخدادهای مثبت کمیاب،
-- log loss برای کیفیت احتمال،
-- و یک معیار آستانه‌دار مثل balanced accuracy برای یک check عملیاتی ساده.
+- log loss و Brier score برای کیفیت احتمال،
+- precision و recall برای کاربردپذیری کلاس مثبت،
+- balanced accuracy برای یک check ساده با توجه به توازن کلاس‌ها،
+- و cost برای trade-off عملیاتی که واقعاً مهم است.
 
 **یادداشت آموزشی:** اگر دانشجوها بپرسند چرا اینجا از test استفاده نمی‌کنیم، این نشانه خوبی است. پاسخ این است که هنوز در حال انتخاب workflow هستیم، پس روی داده توسعه می‌مانیم.""",
         20: """## توصیه عملی
@@ -567,9 +567,7 @@ CODE_REPLACEMENTS = {
     "# Deterministic stratified 60/20/20 split; test stays sealed until notebook 09.": "# split قطعی و stratified به نسبت 60/20/20؛ مجموعه آزمون تا دفترچه 09 قفل می‌ماند.",
     "# Preprocessing is fitted only inside the enclosing training/CV pipeline.": "# preprocessing فقط داخل pipeline آموزش/CV مربوطه fit می‌شود.",
     "# A single untuned baseline gives Optuna something honest to beat.": "# یک baseline بدون تنظیم به Optuna یک هدف منصفانه برای شکست‌دادن می‌دهد.",
-    "# Return development-only cross-validated average precision for one Optuna trial.": "# میانگین precision اعتبارسنجیِ cross-validated فقط روی داده توسعه را برای یک trial برگردان.",
-    "Precision-recall curve": "منحنی دقت-بازخوانی",
-    "ROC curve": "منحنی ROC",
+    "# Return development-only cross-validated log loss for one Optuna trial.": "# log loss اعتبارسنجیِ cross-validated فقط روی داده توسعه را برای یک trial برگردان.",
     "Resampling and weighting can distort probabilities": "نمونه‌برداری مجدد و وزن‌دهی می‌توانند احتمال‌ها را مخدوش کنند",
     "Probability calibration": "کالیبراسیون احتمال",
     "Precision-recall": "دقت-بازخوانی",
@@ -580,7 +578,7 @@ CODE_REPLACEMENTS = {
     "Features after removing leakage:": "ویژگی‌ها پس از حذف نشت:",
     "Numeric features:": "ویژگی‌های عددی:",
     "Categorical features:": "ویژگی‌های categorical:",
-    "Development-only cross-validated average precision": "میانگین precision اعتبارسنجیِ cross-validated روی داده توسعه",
+    "Development-only cross-validated log loss": "log loss اعتبارسنجیِ cross-validated روی داده توسعه",
     "Optuna optimization history": "تاریخچه بهینه‌سازی Optuna",
     "Trial": "trial",
     "Lower is better": "کمتر بهتر است",
@@ -588,14 +586,10 @@ CODE_REPLACEMENTS = {
     "Prediction speed": "سرعت پیش‌بینی",
     "Milliseconds per 1,000 rows": "میلی‌ثانیه برای هر 1,000 ردیف",
     "Validation calibration": "کالیبراسیون اعتبارسنجی",
-    "Precision-recall curve": "منحنی دقت-بازخوانی",
-    "ROC curve": "منحنی ROC",
-    "Chosen model based on validation average precision:": "مدل انتخاب‌شده بر اساس average precision اعتبارسنجی:",
+    "Chosen model based on validation log loss:": "مدل انتخاب‌شده بر اساس log loss اعتبارسنجی:",
     "Selected threshold:": "آستانه انتخاب‌شده:",
     "Decision threshold": "آستانه تصمیم",
     "Validation trade-offs by threshold": "trade-offهای اعتبارسنجی بر حسب آستانه",
-    "Test ROC AUC:": "ROC AUC آزمون:",
-    "Test average precision:": "average precision آزمون:",
     "Classification report at selected threshold:": "گزارش طبقه‌بندی در آستانه انتخاب‌شده:",
     "Saved model artifact to:": "artifact مدل ذخیره شد در:",
     "Saved metadata to:": "فراداده ذخیره شد در:",

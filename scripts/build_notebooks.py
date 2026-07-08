@@ -75,8 +75,8 @@ COMMON = code(
     import seaborn as sns
     from sklearn.compose import ColumnTransformer
     from sklearn.impute import SimpleImputer
-    from sklearn.metrics import (average_precision_score, confusion_matrix, log_loss,
-                                 precision_score, recall_score, roc_auc_score)
+    from sklearn.metrics import (balanced_accuracy_score, brier_score_loss, confusion_matrix,
+                                 f1_score, log_loss, precision_score, recall_score)
     from sklearn.pipeline import Pipeline
     from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
@@ -187,9 +187,10 @@ COMMON = code(
         '''Compute ranking and threshold-based classification metrics.'''
         prediction = np.asarray(probability) >= threshold
         tn, fp, fn, tp = confusion_matrix(y_true, prediction, labels=[0, 1]).ravel()
-        return {"roc_auc": roc_auc_score(y_true, probability),
-                "pr_auc": average_precision_score(y_true, probability),
-                "log_loss": log_loss(y_true, probability),
+        return {"log_loss": log_loss(y_true, probability),
+                "brier_score": brier_score_loss(y_true, probability),
+                "balanced_accuracy": balanced_accuracy_score(y_true, prediction),
+                "f1": f1_score(y_true, prediction, zero_division=0),
                 "precision": precision_score(y_true, prediction, zero_division=0),
                 "recall": recall_score(y_true, prediction, zero_division=0),
                 "specificity": tn / (tn + fp) if (tn + fp) else np.nan,
@@ -536,7 +537,7 @@ def n00() -> list[dict]:
         code(
             """
             from sklearn.linear_model import LogisticRegression
-            from sklearn.metrics import average_precision_score, balanced_accuracy_score, log_loss, roc_auc_score
+            from sklearn.metrics import balanced_accuracy_score, brier_score_loss, f1_score, log_loss
             from sklearn.model_selection import StratifiedKFold, cross_val_predict
             from sklearn.pipeline import Pipeline
 
@@ -553,10 +554,10 @@ def n00() -> list[dict]:
             dev_prob = cross_val_predict(baseline, X_dev, y_dev, cv=cv, method="predict_proba", n_jobs=-1)[:, 1]
 
             baseline_summary = pd.Series({
-                "roc_auc": roc_auc_score(y_dev, dev_prob),
-                "pr_auc": average_precision_score(y_dev, dev_prob),
                 "log_loss": log_loss(y_dev, dev_prob),
+                "brier_score": brier_score_loss(y_dev, dev_prob),
                 "balanced_accuracy@0.5": balanced_accuracy_score(y_dev, dev_prob >= 0.5),
+                "f1@0.5": f1_score(y_dev, dev_prob >= 0.5, zero_division=0),
             }, name="development CV")
             display(baseline_summary.to_frame())
             """
@@ -567,10 +568,10 @@ def n00() -> list[dict]:
 
             For imbalanced problems, accuracy alone is usually misleading. We prefer:
 
-            - ROC AUC for ranking quality,
-            - PR AUC for rare positive detection,
-            - log loss for probability quality,
-            - and a thresholded metric such as balanced accuracy for a simple operational check.
+            - log loss and Brier score for probability quality,
+            - precision and recall for positive-class usefulness,
+            - balanced accuracy for a simple class-balance check,
+            - and cost for the operational trade-off we actually care about.
 
             **Teaching note:** if students ask why we do not use the test set here, that is a good sign.
             The answer is that we are still choosing the workflow, so we stay on development data.
@@ -683,25 +684,28 @@ def n01() -> list[dict]:
                 "logistic": Pipeline([("preprocess", make_preprocessor(development)),
                                       ("model", LogisticRegression(max_iter=1200, random_state=SEED))]),
             }
-            from sklearn.metrics import make_scorer, precision_score
+            from sklearn.metrics import f1_score, make_scorer, precision_score
             scoring = {"accuracy": "accuracy", "precision": make_scorer(precision_score, zero_division=0), "recall": "recall",
-                       "f1": "f1", "roc_auc": "roc_auc", "pr_auc": "average_precision",
-                       "neg_log_loss": "neg_log_loss"}
+                       "f1": make_scorer(f1_score, zero_division=0), "balanced_accuracy": "balanced_accuracy",
+                       "neg_log_loss": "neg_log_loss", "neg_brier_score": "neg_brier_score"}
             rows = []
             for name, model in models.items():
                 scores = cross_validate(model, X_dev, y_dev, cv=cv, scoring=scoring, n_jobs=-1)
-                rows.append({"model": name, **{k: (-scores[f"test_{k}"].mean() if k == "neg_log_loss" else scores[f"test_{k}"].mean())
+                rows.append({"model": name, **{k: (-scores[f"test_{k}"].mean() if k.startswith("neg_") else scores[f"test_{k}"].mean())
                                                for k in scoring}})
-            cv_results = pd.DataFrame(rows).set_index("model").rename(columns={"neg_log_loss": "log_loss"})
+            cv_results = pd.DataFrame(rows).set_index("model").rename(columns={
+                "neg_log_loss": "log_loss",
+                "neg_brier_score": "brier_score",
+            })
             cv_results
             """
         ),
         md(
             """
-            Accuracy can exceed 88% by predicting no subscription for everyone. ROC-AUC averages ranking
-            behavior across thresholds and may look healthy even when precision at operational recall is
-            poor. PR-AUC focuses on the positive class and should be compared with its prevalence baseline.
-            Log loss evaluates probability quality and heavily penalizes confident errors.
+            Accuracy can exceed 88% by predicting no subscription for everyone. Balanced accuracy gives
+            equal weight to the positive and negative classes, so the majority class cannot dominate the
+            summary. F1 combines precision and recall for the positive class, while log loss and Brier score
+            evaluate the quality of predicted probabilities.
 
             For threshold $t$, recall is $TP/(TP+FN)$, specificity is $TN/(TN+FP)$, and precision is
             $TP/(TP+FP)$. No threshold is universally correct: it encodes an operating trade-off.
@@ -709,14 +713,15 @@ def n01() -> list[dict]:
         ),
         code(
             """
-            from sklearn.metrics import PrecisionRecallDisplay, RocCurveDisplay
             logistic = models["logistic"].fit(X_dev, y_dev)
             val_probability = logistic.predict_proba(X_val)[:, 1]
             fig, axes = plt.subplots(1, 2, figsize=(11, 4))
-            RocCurveDisplay.from_predictions(y_val, val_probability, ax=axes[0])
-            PrecisionRecallDisplay.from_predictions(y_val, val_probability, ax=axes[1])
-            axes[1].axhline(y_val.mean(), ls="--", color="grey", label="prevalence")
-            axes[1].legend()
+            threshold_preview = threshold_table(y_val, val_probability)
+            threshold_preview.plot(x="threshold", y=["precision", "recall", "f1"], ax=axes[0])
+            axes[0].set_title("Validation threshold metrics")
+            threshold_preview.plot(x="threshold", y="cost", ax=axes[1], legend=False)
+            axes[1].set_title("Validation cost by threshold")
+            axes[1].set_ylabel("cost")
             plt.tight_layout()
             """
         ),
@@ -765,9 +770,9 @@ def n01() -> list[dict]:
         ),
         md(
             """
-            Calibration and discrimination answer different questions. A model can rank clients well
-            (high ROC-AUC) but systematically overstate probabilities. A calibration curve is itself an
-            estimate: small bins are noisy, and calibration fitted on the same data is optimistic.
+            Calibration and hard-label performance answer different questions. A model can choose useful
+            clients at one threshold while systematically overstating probabilities. A calibration curve is
+            itself an estimate: small bins are noisy, and calibration fitted on the same data is optimistic.
 
             ## Common mistakes and leakage warnings
 
@@ -787,14 +792,14 @@ def n01() -> list[dict]:
             ## Summary
 
             Cross-validation selected the model family; validation selected an operating threshold.
-            PR-AUC and business cost exposed behavior hidden by accuracy, while calibration assessed the
+            F1, balanced accuracy, and business cost exposed behavior hidden by accuracy, while calibration assessed the
             meaning of probabilities. The test set has still not been scored.
 
             ## References
 
             - [scikit-learn classification metrics](https://scikit-learn.org/stable/modules/model_evaluation.html#classification-metrics)
             - [scikit-learn probability calibration](https://scikit-learn.org/stable/modules/calibration.html)
-            - [Precision-recall plot documentation](https://scikit-learn.org/stable/modules/generated/sklearn.metrics.PrecisionRecallDisplay.html)
+            - [scikit-learn Brier score loss](https://scikit-learn.org/stable/modules/generated/sklearn.metrics.brier_score_loss.html)
             """
         ),
     ]
@@ -2346,7 +2351,7 @@ def n04() -> list[dict]:
             """
             import lightgbm as lgb
             from sklearn.model_selection import StratifiedKFold
-            from sklearn.metrics import average_precision_score
+            from sklearn.metrics import log_loss
             from src.course_utils import (classification_metrics, load_bank_data, make_preprocessor,
                                           make_splits, split_xy)
 
@@ -2366,7 +2371,7 @@ def n04() -> list[dict]:
 
             In this notebook the model is LightGBM, but the center of gravity is Optuna:
 
-            - the objective returns cross-validated average precision from development data only;
+            - the objective returns cross-validated log loss from development data only;
             - each fold owns its own preprocessing and early-stopping split;
             - the search space is intentionally bounded because search budget is limited;
             - pruning can stop weak trials after partial evidence;
@@ -2388,7 +2393,7 @@ def n04() -> list[dict]:
             )
             lightgbm_baseline.fit(
                 X_dev_encoded, y_dev, eval_set=[(X_val_encoded, y_val)],
-                eval_metric="average_precision",
+                eval_metric="binary_logloss",
                 callbacks=[lgb.early_stopping(50, verbose=False)],
             )
             lgb_p = lightgbm_baseline.predict_proba(X_val_encoded)[:, 1]
@@ -2401,7 +2406,7 @@ def n04() -> list[dict]:
             ## Design the Optuna study
 
             The objective below uses only development folds. Each fold fits its own encoder and uses its
-            validation fold for early stopping. The trial reports intermediate mean average precision after each fold,
+            validation fold for early stopping. The trial reports intermediate mean log loss after each fold,
             enabling Optuna's median pruner. The sealed test set is absent from the function, and the
             validation set is also absent from the objective.
 
@@ -2427,7 +2432,7 @@ def n04() -> list[dict]:
             cv = StratifiedKFold(n_splits=CV_FOLDS, shuffle=True, random_state=SEED)
 
             def objective(trial):
-                # Return development-only cross-validated average precision for one Optuna trial.
+                # Return development-only cross-validated log loss for one Optuna trial.
                 params = {
                     "objective": "binary", "verbosity": -1, "n_jobs": -1,
                     "random_state": SEED, "n_estimators": 800,
@@ -2448,20 +2453,20 @@ def n04() -> list[dict]:
                     X_stop_e = fold_pre.transform(X_stop)
                     model = lgb.LGBMClassifier(**params)
                     model.fit(X_fit_e, y_fit, eval_set=[(X_stop_e, y_stop)],
-                              eval_metric="average_precision",
+                              eval_metric="binary_logloss",
                               callbacks=[lgb.early_stopping(35, verbose=False)])
-                    fold_scores.append(average_precision_score(y_stop, model.predict_proba(X_stop_e)[:, 1]))
+                    fold_scores.append(log_loss(y_stop, model.predict_proba(X_stop_e)[:, 1]))
                     trial.report(float(np.mean(fold_scores)), step=fold)
                     if trial.should_prune():
                         raise optuna.TrialPruned()
                 return float(np.mean(fold_scores))
 
             study = optuna.create_study(
-                direction="maximize", sampler=optuna.samplers.TPESampler(seed=SEED),
+                direction="minimize", sampler=optuna.samplers.TPESampler(seed=SEED),
                 pruner=optuna.pruners.MedianPruner(n_startup_trials=3),
             )
             study.optimize(objective, n_trials=8 if FAST_MODE else 25, timeout=180 if FAST_MODE else 900)
-            print("best CV average precision:", round(study.best_value, 4))
+            print("best CV log loss:", round(study.best_value, 4))
             display(pd.Series(study.best_params, name="best parameter"))
             """
         ),
@@ -2476,7 +2481,7 @@ def n04() -> list[dict]:
             )
             ax.set_title("Optuna optimization history")
             ax.set_xlabel("trial")
-            ax.set_ylabel("development CV average precision")
+            ax.set_ylabel("development CV log loss")
             plt.show()
             """
         ),
@@ -2507,7 +2512,7 @@ def n04() -> list[dict]:
             }
             tuned = lgb.LGBMClassifier(**tuned_params)
             tuned.fit(X_dev_encoded, y_dev, eval_set=[(X_val_encoded, y_val)],
-                      eval_metric="average_precision",
+                      eval_metric="binary_logloss",
                       callbacks=[lgb.early_stopping(50, verbose=False)])
             tuned_p = tuned.predict_proba(X_val_encoded)[:, 1]
             validation_comparison = pd.DataFrame({
@@ -2674,7 +2679,7 @@ def n05() -> list[dict]:
                 rows.append({"model": name, **classification_metrics(y_val, p),
                              "fit_seconds": fit_seconds, "inference_ms_per_1k": infer_ms_per_1k})
             ensemble_results = pd.DataFrame(rows).set_index("model")
-            ensemble_results.sort_values("pr_auc", ascending=False)
+            ensemble_results.sort_values("cost", ascending=True)
             """
         ),
         code(
@@ -2933,7 +2938,6 @@ def n07() -> list[dict]:
             from sklearn.neighbors import LocalOutlierFactor
             from sklearn.preprocessing import MaxAbsScaler
             from sklearn.pipeline import Pipeline
-            from sklearn.metrics import average_precision_score
             from src.course_utils import load_bank_data, make_preprocessor, make_splits, split_xy
 
             development, validation, _sealed_test = make_splits(load_bank_data(), reduced=FAST_MODE)
@@ -2989,10 +2993,16 @@ def n07() -> list[dict]:
                 order = np.argsort(score)[::-1][:k]
                 return float(np.mean(np.asarray(labels)[order]))
 
+            def recall_at_k(labels, score, k):
+                order = np.argsort(score)[::-1][:k]
+                positives = np.asarray(labels).sum()
+                return float(np.asarray(labels)[order].sum() / positives) if positives else np.nan
+
             k = int(anomaly_label.sum())
             evaluation = pd.DataFrame({name: {
-                "average_precision": average_precision_score(anomaly_label, score),
                 "precision_at_k": precision_at_k(anomaly_label, score, k),
+                "recall_at_k": recall_at_k(anomaly_label, score, k),
+                "lift_at_k": precision_at_k(anomaly_label, score, k) / anomaly_label.mean(),
                 "k": k,
             } for name, score in scores.items()}).T
             display(evaluation)
@@ -3007,8 +3017,8 @@ def n07() -> list[dict]:
         ),
         md(
             """
-            Precision@k matches a fixed investigation budget. Average precision measures ranking across all
-            cutoffs but inherits the synthetic-label definition. Original rows scoring highly may be valid
+            Precision@k matches a fixed investigation budget, while recall@k shows how many injected anomalies
+            the review budget captured. Original rows scoring highly may be valid
             rare customers, genuine data errors, distribution tails, or artifacts of encoding. They require
             review—not automatic deletion.
 
@@ -3220,7 +3230,7 @@ def n08() -> list[dict]:
             """
             With delayed labels, monitor schema failures, missing/unknown rates, feature and prediction drift,
             volumes, latency, and decision rates immediately. Join outcomes later by prediction ID to update
-            PR-AUC, cost, subgroup behavior, and calibration. Never retrain solely because one p-value fires.
+            cost, precision, recall, subgroup behavior, and calibration. Never retrain solely because one p-value fires.
 
             **Investigation workflow:** validate pipeline/data changes → localize segments/features → check label
             quality and delay → measure business/performance impact → reproduce offline → approve retraining or
@@ -3444,7 +3454,7 @@ def n09() -> list[dict]:
 
             Log model/data versions, prediction ID, event time, schema outcomes, score, decision, and latency.
             Immediately monitor volume, schema failures, unknown/missing rates, feature/prediction drift, and
-            decision rate. When labels arrive, join by prediction ID and monitor PR-AUC, business cost,
+            decision rate. When labels arrive, join by prediction ID and monitor precision, recall, business cost,
             calibration, and approved subgroup slices. Investigate sustained alerts before retraining; require
             reproducible data, challenger validation, governance review, rollback, and shadow/canary checks.
 
