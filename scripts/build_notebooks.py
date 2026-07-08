@@ -19,10 +19,12 @@ NB_DIR = ROOT / "notebooks"
 
 
 def md(text: str) -> dict:
+    """Create a markdown notebook cell from plain text."""
     return {"cell_type": "markdown", "id": uuid.uuid4().hex[:8], "metadata": {}, "source": dedent(text).strip() + "\n"}
 
 
 def code(text: str) -> dict:
+    """Create a code notebook cell and strip external helper imports."""
     source = dedent(text).strip() + "\n"
     # Every notebook embeds the shared teaching helpers below.  Strip legacy
     # imports so a generated notebook can be copied out of this repository and
@@ -44,6 +46,7 @@ def code(text: str) -> dict:
 
 
 def notebook(cells: list[dict]) -> dict:
+    """Wrap a list of cells in a notebook structure."""
     return {
         "cells": cells,
         "metadata": {
@@ -82,18 +85,22 @@ COMMON = code(
     LEAKAGE_COLUMNS = ["duration"]
 
     def project_root():
+        '''Return the course root when present, otherwise the notebook directory.'''
         # Return the course root when present, otherwise the notebook's directory.
         return ROOT
 
     def set_seed(seed=SEED):
+        '''Seed Python and NumPy RNGs for reproducible notebook runs.'''
         random.seed(seed)
         np.random.seed(seed)
 
     def fast_mode():
+        '''Report whether notebooks should use the reduced fast-mode sample.'''
         # Set FAST_MODE=0 for full-size experiments; laptop mode is the default.
         return os.getenv("FAST_MODE", "1").lower() not in {"0", "false", "no"}
 
     def bank_data_path():
+        '''Locate the bundled Bank Marketing CSV file.'''
         # The course ships with a local dataset; notebooks never access the network.
         path = project_root() / "data" / "raw" / "bank-full.csv"
         if not path.is_file():
@@ -104,6 +111,7 @@ COMMON = code(
         return path
 
     def file_sha256(path):
+        '''Compute the SHA-256 digest of a local file.'''
         digest = hashlib.sha256()
         with Path(path).open("rb") as handle:
             for chunk in iter(lambda: handle.read(1 << 20), b""):
@@ -111,6 +119,7 @@ COMMON = code(
         return digest.hexdigest()
 
     def load_bank_data(include_duration=False):
+        '''Load the Bank Marketing dataset and drop leakage columns by default.'''
         # Load the data, encode y, and exclude post-call duration by default.
         frame = pd.read_csv(bank_data_path(), sep=";")
         frame[TARGET] = frame[TARGET].map({"no": 0, "yes": 1}).astype("int8")
@@ -119,6 +128,7 @@ COMMON = code(
         return frame
 
     def stratified_sample(frame, n, seed=SEED):
+        '''Draw a label-preserving sample from a classified dataset.'''
         if n >= len(frame):
             return frame.copy()
         fractions = frame[TARGET].value_counts(normalize=True)
@@ -130,6 +140,7 @@ COMMON = code(
         return pd.concat(parts).sample(frac=1, random_state=seed).reset_index(drop=True)
 
     def make_splits(frame=None, reduced=None):
+        '''Create deterministic stratified train, validation, and test splits.'''
         # Deterministic stratified 60/20/20 split; test stays sealed until notebook 09.
         from sklearn.model_selection import train_test_split
         frame = load_bank_data() if frame is None else frame
@@ -145,15 +156,18 @@ COMMON = code(
         return tuple(part.reset_index(drop=True) for part in (train, validation, test))
 
     def split_xy(frame):
+        '''Separate a frame into feature matrix and target vector.'''
         return frame.drop(columns=TARGET), frame[TARGET]
 
     def feature_groups(frame):
+        '''Identify numeric and categorical feature columns.'''
         features = frame.drop(columns=[TARGET], errors="ignore")
         categorical = features.select_dtypes(include=["object", "category", "bool"]).columns.tolist()
         numerical = features.select_dtypes(include=np.number).columns.tolist()
         return numerical, categorical
 
     def make_preprocessor(frame, scale_numeric=True):
+        '''Build the preprocessing pipeline for numeric and categorical features.'''
         # Preprocessing is fitted only inside the enclosing training/CV pipeline.
         numerical, categorical = feature_groups(frame)
         numeric_steps = [("impute", SimpleImputer(strategy="median"))]
@@ -170,6 +184,7 @@ COMMON = code(
         ], sparse_threshold=0.3)
 
     def classification_metrics(y_true, probability, threshold=0.5):
+        '''Compute ranking and threshold-based classification metrics.'''
         prediction = np.asarray(probability) >= threshold
         tn, fp, fn, tp = confusion_matrix(y_true, prediction, labels=[0, 1]).ravel()
         return {"roc_auc": roc_auc_score(y_true, probability),
@@ -181,12 +196,14 @@ COMMON = code(
                 "cost": float(fp + 5 * fn)}
 
     def threshold_table(y_true, probability, thresholds=None):
+        '''Evaluate classification metrics across a list of decision thresholds.'''
         thresholds = np.linspace(0.05, 0.80, 76) if thresholds is None else thresholds
         return pd.DataFrame([{"threshold": float(t),
                               **classification_metrics(y_true, probability, float(t))}
                              for t in thresholds])
 
     def add_domain_features(frame):
+        '''Create domain-inspired features for the Bank Marketing dataset.'''
         result = frame.copy()
         result["was_previously_contacted"] = (result["pdays"] != -1).astype("int8")
         result["pdays_clean"] = result["pdays"].replace(-1, np.nan)
@@ -197,12 +214,14 @@ COMMON = code(
         return result.drop(columns=["pdays"])
 
     def environment_metadata():
+        '''Collect runtime metadata for experiment tracking.'''
         import sklearn
         return {"python": platform.python_version(), "platform": platform.platform(),
                 "numpy": np.__version__, "pandas": pd.__version__,
                 "scikit_learn": sklearn.__version__}
 
     def write_json(data, path):
+        '''Serialize structured data to a JSON file on disk.'''
         path = Path(path)
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(data, indent=2, sort_keys=True), encoding="utf-8")
@@ -218,6 +237,7 @@ COMMON = code(
 
 
 def n00() -> list[dict]:
+    """Build notebook 00: course setup and dataset exploration."""
     return [
         md(
             """
@@ -612,6 +632,7 @@ def n00() -> list[dict]:
 
 
 def n01() -> list[dict]:
+    """Build notebook 01: evaluation and cross-validation."""
     return [
         md(
             """
@@ -780,6 +801,7 @@ def n01() -> list[dict]:
 
 
 def n01_gradient_boosting() -> list[dict]:
+    """Assemble the gradient boosting fundamentals notebook."""
     return [
         md(
             """
@@ -1200,6 +1222,7 @@ def n01_gradient_boosting() -> list[dict]:
 
 
 def n02() -> list[dict]:
+    """Build notebook 02: advanced feature engineering."""
     return [
         md(
             """
@@ -1927,6 +1950,7 @@ def n02() -> list[dict]:
 
 
 def n03() -> list[dict]:
+    """Build notebook 03: imbalanced learning."""
     return [
         md(
             """
@@ -2298,6 +2322,7 @@ def n03() -> list[dict]:
 
 
 def n04() -> list[dict]:
+    """Build notebook 04: Optuna hyperparameter optimization."""
     return [
         md(
             """
@@ -2534,6 +2559,7 @@ def n04() -> list[dict]:
 
 
 def n05() -> list[dict]:
+    """Build notebook 05: ensemble learning."""
     return [
         md(
             """
@@ -2703,6 +2729,7 @@ def n05() -> list[dict]:
 
 
 def n06() -> list[dict]:
+    """Build notebook 06: explainable AI with SHAP."""
     return [
         md(
             """
@@ -2870,6 +2897,7 @@ def n06() -> list[dict]:
 
 
 def n07() -> list[dict]:
+    """Build notebook 07: optional anomaly detection extension."""
     return [
         md(
             """
@@ -3016,6 +3044,7 @@ def n07() -> list[dict]:
 
 
 def n08() -> list[dict]:
+    """Build notebook 08: data drift and model monitoring."""
     return [
         md(
             """
@@ -3231,6 +3260,7 @@ def n08() -> list[dict]:
 
 
 def n09() -> list[dict]:
+    """Build notebook 09: end-to-end production ML project."""
     return [
         md(
             """
@@ -3471,6 +3501,7 @@ BUILDERS = {
 
 
 def main(names: list[str]) -> None:
+    """Generate the requested course notebooks."""
     NB_DIR.mkdir(parents=True, exist_ok=True)
     selected = names or list(BUILDERS)
     for name in selected:

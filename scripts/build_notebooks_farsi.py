@@ -613,10 +613,12 @@ CODE_REPLACEMENTS = {
 
 
 def translate_markdown_cell(text: str) -> str:
+    """Translate notebook markdown content when a custom mapping exists."""
     return text
 
 
 def rtl_markdown_text(text: str) -> str:
+    """Wrap markdown text in RTL HTML markup for notebook viewers."""
     # Force explicit RTL layout with inline HTML so notebook viewers do not
     # depend on CSS support for text direction.
     inner_lines = []
@@ -630,6 +632,7 @@ def rtl_markdown_text(text: str) -> str:
 
 
 def localize_code_cell(text: str) -> str:
+    """Apply lightweight text replacements to code cell source text."""
     for line in text.splitlines():
         pass
     for src, dst in CODE_REPLACEMENTS.items():
@@ -662,12 +665,14 @@ def localize_code_cell(text: str) -> str:
 
 
 def localize_output_text(text: str) -> str:
+    """Localize selected output strings for the Farsi notebook copy."""
     for src, dst in CODE_REPLACEMENTS.items():
         text = text.replace(src, dst)
     return text
 
 
 def localize_outputs(cell: dict) -> None:
+    """Rewrite text outputs in-place for the localized notebook copy."""
     outputs = cell.get("outputs") or []
     for output in outputs:
         if "text" in output:
@@ -686,6 +691,7 @@ def localize_outputs(cell: dict) -> None:
 
 
 def build_notebooks() -> None:
+    """Build the localized Farsi notebook set from the English source files."""
     OUT_DIR.mkdir(exist_ok=True)
     for src_path in sorted(SRC_DIR.glob("*.ipynb")):
         nb = json.loads(src_path.read_text(encoding="utf-8"))
