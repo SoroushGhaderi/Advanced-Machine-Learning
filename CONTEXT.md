@@ -18,7 +18,7 @@ and compare a small number of finalized candidates. It is not the test set.
 
 ### Test set
 
-The sealed labeled subset used once in notebook 09 for final evaluation. It is
+The sealed labeled subset used once in notebook 07 for final evaluation. It is
 never used for feature selection, hyperparameter tuning, or threshold choice.
 
 ### Business cost
@@ -26,4 +26,3 @@ never used for feature selection, hyperparameter tuning, or threshold choice.
 An explicit teaching utility where a false positive costs 1 unit and a false
 negative costs 5 units. These values are illustrative assumptions, not claims
 about the original bank.
-

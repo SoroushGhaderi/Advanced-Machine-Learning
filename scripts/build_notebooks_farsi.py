@@ -8,6 +8,7 @@ small set of user-facing text replacements in code cells such as plot titles.
 from __future__ import annotations
 
 import json
+import sys
 from copy import deepcopy
 from pathlib import Path
 
@@ -18,6 +19,7 @@ OUT_DIR = ROOT / "notebooks_farsi"
 
 FAIRY_SETUP_CELL = {
     "cell_type": "code",
+    "id": "farsi-setup",
     "metadata": {"tags": ["hide-input"]},
     "execution_count": None,
     "outputs": [],
@@ -49,6 +51,7 @@ FAIRY_SETUP_CELL = {
 
 RTL_STYLE_CELL = {
     "cell_type": "markdown",
+    "id": "rtl-style",
     "metadata": {"tags": ["hide-input"]},
     "source": [
         "<style>\n",
@@ -208,7 +211,7 @@ UCI مقدار `unknown` را یک دسته واقعی در نظر می‌گیر
 
 - **توسعه (60%)**: fit، cross-validation، انتخاب ویژگی/مدل/hyperparameter.
 - **اعتبارسنجی (20%)**: انتخاب آستانه عملیاتی و مقایسه محدود نهایی‌ها.
-- **آزمون (20%)**: تا notebook 09 قفل می‌ماند؛ فقط یک‌بار برای ارزیابی نهایی استفاده می‌شود.
+- **آزمون (20%)**: تا notebook 07 قفل می‌ماند؛ فقط یک‌بار برای ارزیابی نهایی استفاده می‌شود.
 
 یک split زمانی واقعی برای پیش‌بینی استقرار بهتر است، اما این فایل سال و timestamp کامل و پایدار ندارد. split گروهی برای مشتریان تکراری کمک می‌کرد، اما شناسه مشتری در داده موجود نیست.
 
@@ -495,65 +498,9 @@ CatBoost می‌تواند برای برخی مسائل categorical را به‌
         5: "## طراحی study در Optuna",
         10: "یک بهبود خیلی کوچک در validation ممکن است با نوسان نمونه‌گیری از بین برود و هزینه جست‌وجوی اضافه را توجیه نکند.",
     },
-    "05_ensemble_learning.ipynb": {
-        0: "# 05 - یادگیری ensemble",
-        1: "## نقشه مفهومی",
-        3: "## 1. داده را بارگذاری کنید",
-        6: "### تفسیر",
-        7: "## 2. یک split توسعه و اعتبارسنجی بسازید",
-        9: "## 3. یک pipeline پیش‌پردازش روشن بسازید",
-        12: "## 4. مدل‌های baseline عملی را آموزش دهید",
-        15: "### راهنمای خواندن baseline",
-        16: "## 5. رأی‌گیری نرم",
-        18: "### بحث رأی‌گیری",
-        19: "## 6. Stacking",
-        21: "### بحث stacking",
-        22: "## 7. همه نامزدها را مقایسه کنید",
-        26: "### نقطه تصمیم توصیه",
-        27: "## 8. آستانه تصمیم را تنظیم کنید",
-        29: "### بحث آستانه",
-        30: "## 9. کالیبراسیون احتمال را بررسی کنید",
-        32: "## توصیه عملی نهایی",
-        33: "## اشتباهات رایج و هشدارهای نشت",
-    },
-    "06_anomaly_detection_extension.ipynb": {
-        0: "# 07 — افزونه عملی تشخیص ناهنجاری",
-        2: "## مفهوم: چه چیزی ناهنجاری محسوب می‌شود؟",
-        3: "## بارگذاری داده",
-        5: "نرخ اشتراک فقط برای جهت‌گیری نشان داده شده است. یک کلاس supervised کمیاب، به‌طور خودکار کلاس ناهنجاری نیست. اگر آن را چنین فرض کنیم، مسئله را اشتباه صورت‌بندی می‌کنیم.",
-        6: "## پیش‌پردازش",
-        8: "برای detectorهای واقعی پایین‌تر، preprocessing داخل هر pipeline قرار می‌گیرد. پیش‌نمایش بالا فقط برای آموزش است؛ هر detector باید ویژگی‌ها را فقط با داده همان مسیر خودش ببیند.",
-        9: "## برچسب‌های اعتبارسنجی کنترل‌شده",
-        11: "## baseline عملی: قوانین ساده کسب‌وکار",
-        13: "امتیاز قانون 0 یعنی هیچ‌یک از فیلدهای تحت نظر از آستانه خود عبور نکرده‌اند. امتیازهای بالاتر یعنی نقض قانون‌های بیشتر.",
-        14: "## detectorهای مبتنی بر مدل",
-        16: "## ارزیابی با بودجه بررسی",
-        19: "## تفسیر",
-        21: "ردیف‌های با بالاترین امتیاز، اولین ردیف‌هایی هستند که یک بازبین انسانی می‌بیند. در یک سیستم واقعی، این جدول باید با توضیح دلیل هشدار همراه شود تا بررسی سریع‌تر و قابل‌اعتمادتر شود.",
-        22: "## توصیه عملی",
-    },
-    "07_end_to_end_production_ml_project.ipynb": {
-        0: "# 07 — پروژه ML تولیدی end-to-end",
-        1: "## اهداف یادگیری",
-        2: "## 1. صورت‌بندی مسئله",
-        4: "## 2. بارگذاری داده محلی",
-        6: "یک ممیزی سریع کمک می‌کند قبل از مدل‌سازی، توازن target، نوع ویژگی‌ها و ریسک‌های آشکار leakage را بفهمیم.",
-        8: "## 3. آماده‌سازی ویژگی‌ها و split داده",
-        10: "## 4. پیش‌پردازش بدون نشت",
-        12: "## 5. ساخت baselineهای عملی",
-        14: "## 6. مقایسه مدل‌ها روی داده validation",
-        16: "منحنی‌های بصری، trade-off را برای آموزش ساده‌تر می‌کنند. یک مدل بهتر معمولاً منحنی‌ای دارد که به گوشه بالا-راست نزدیک‌تر است.",
-        18: "## 7. انتخاب مدل و آستانه",
-        21: "آستانه را فقط با داده validation انتخاب می‌کنیم. از این نقطه به بعد، test باید فقط یک‌بار برای برآورد نهایی استفاده شود.",
-        23: "## 8. ارزیابی نهایی روی test",
-        25: "## 9. تفسیر",
-        27: "## 10. توصیه عملی",
-        29: "## 11. ذخیره و بارگذاری دوباره artifact استنتاج",
-        31: "تأیید بارگذاری دوباره، اشتباهات رایج استقرار را زود آشکار می‌کند: ستون‌های مفقود، ناهماهنگی preprocessing، یا آستانه‌ای که درست ذخیره نشده است.",
-        33: "## 12. بررسی‌های سبک",
-        35: "## تمرین‌ها",
-        36: "**زمان تخمینی:** 90-120 دقیقه",
-    },
+    # Notebooks 05–07 currently mirror the authoritative English generator.
+    # Do not apply the removed legacy index maps: they targeted an older cell
+    # layout and silently replaced unrelated sections after RTL cells were added.
 }
 
 
@@ -564,7 +511,7 @@ CODE_REPLACEMENTS = {
     "# Set FAST_MODE=0 for full-size experiments; laptop mode is the default.": "# برای آزمایش‌های کامل، FAST_MODE=0 را تنظیم کنید؛ حالت لپ‌تاپ به‌صورت پیش‌فرض فعال است.",
     "# The course ships with a local dataset; notebooks never access the network.": "# این دوره با یک مجموعه‌داده محلی همراه است؛ دفترچه‌ها هرگز به شبکه دسترسی ندارند.",
     "# Load the data, encode y, and exclude post-call duration by default.": "# داده را بارگذاری کن، y را encode کن، و مدت تماس پس از تماس را به‌صورت پیش‌فرض حذف کن.",
-    "# Deterministic stratified 60/20/20 split; test stays sealed until notebook 09.": "# split قطعی و stratified به نسبت 60/20/20؛ مجموعه آزمون تا دفترچه 09 قفل می‌ماند.",
+    "# Deterministic stratified 60/20/20 split; test stays sealed until notebook 07.": "# split قطعی و stratified به نسبت 60/20/20؛ مجموعه آزمون تا دفترچه 07 قفل می‌ماند.",
     "# Preprocessing is fitted only inside the enclosing training/CV pipeline.": "# preprocessing فقط داخل pipeline آموزش/CV مربوطه fit می‌شود.",
     "# A single untuned baseline gives Optuna something honest to beat.": "# یک baseline بدون تنظیم به Optuna یک هدف منصفانه برای شکست‌دادن می‌دهد.",
     "# Return development-only cross-validated log loss for one Optuna trial.": "# log loss اعتبارسنجیِ cross-validated فقط روی داده توسعه را برای یک trial برگردان.",
@@ -684,10 +631,13 @@ def localize_outputs(cell: dict) -> None:
                         output["data"][key] = localize_output_text(value)
 
 
-def build_notebooks() -> None:
+def build_notebooks(names: list[str] | None = None) -> None:
     """Build the localized Farsi notebook set from the English source files."""
     OUT_DIR.mkdir(exist_ok=True)
-    for src_path in sorted(SRC_DIR.glob("*.ipynb")):
+    src_paths = [SRC_DIR / name for name in names] if names else sorted(SRC_DIR.glob("*.ipynb"))
+    for src_path in src_paths:
+        if not src_path.is_file():
+            raise SystemExit(f"Unknown notebook: {src_path.name}")
         nb = json.loads(src_path.read_text(encoding="utf-8"))
         mapping = TRANSLATIONS.get(src_path.name, {})
         if nb.get("cells"):
@@ -710,4 +660,4 @@ def build_notebooks() -> None:
 
 
 if __name__ == "__main__":
-    build_notebooks()
+    build_notebooks(sys.argv[1:])

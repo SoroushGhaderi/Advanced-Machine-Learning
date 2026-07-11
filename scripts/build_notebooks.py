@@ -75,8 +75,9 @@ COMMON = code(
     import seaborn as sns
     from sklearn.compose import ColumnTransformer
     from sklearn.impute import SimpleImputer
-    from sklearn.metrics import (balanced_accuracy_score, brier_score_loss, confusion_matrix,
-                                 f1_score, log_loss, precision_score, recall_score)
+    from sklearn.metrics import (average_precision_score, balanced_accuracy_score,
+                                 brier_score_loss, confusion_matrix, f1_score, log_loss,
+                                 precision_score, recall_score, roc_auc_score)
     from sklearn.pipeline import Pipeline
     from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
@@ -141,7 +142,7 @@ COMMON = code(
 
     def make_splits(frame=None, reduced=None):
         '''Create deterministic stratified train, validation, and test splits.'''
-        # Deterministic stratified 60/20/20 split; test stays sealed until notebook 09.
+        # Deterministic stratified 60/20/20 split; test stays sealed until notebook 07.
         from sklearn.model_selection import train_test_split
         frame = load_bank_data() if frame is None else frame
         train_val, test = train_test_split(
@@ -187,7 +188,9 @@ COMMON = code(
         '''Compute ranking and threshold-based classification metrics.'''
         prediction = np.asarray(probability) >= threshold
         tn, fp, fn, tp = confusion_matrix(y_true, prediction, labels=[0, 1]).ravel()
-        return {"log_loss": log_loss(y_true, probability),
+        return {"roc_auc": roc_auc_score(y_true, probability),
+                "average_precision": average_precision_score(y_true, probability),
+                "log_loss": log_loss(y_true, probability),
                 "brier_score": brier_score_loss(y_true, probability),
                 "balanced_accuracy": balanced_accuracy_score(y_true, prediction),
                 "f1": f1_score(y_true, prediction, zero_division=0),
@@ -501,7 +504,7 @@ def n00() -> list[dict]:
 
             - **Development (60%)**: fitting, cross-validation, feature/model/hyperparameter selection.
             - **Validation (20%)**: operating-threshold selection and limited finalist comparison.
-            - **Test (20%)**: sealed until notebook 09; used once for final evaluation.
+            - **Test (20%)**: sealed until notebook 07; used once for final evaluation.
 
             A true temporal split would be preferable for deployment forecasting, but this file lacks a
             year and stable full timestamp. A grouped split would help with repeated clients, but no
@@ -2536,7 +2539,7 @@ def n04() -> list[dict]:
             """
             A tiny validation gain may not survive sampling variation and may not justify added search cost.
             Trial histories are adaptive; the best CV score is optimistically selected. Final claims wait for
-            notebook 09's one-time test evaluation.
+            notebook 07's one-time test evaluation.
 
             ## Common mistakes and leakage warnings
 
@@ -2912,11 +2915,11 @@ def n06() -> list[dict]:
 
 
 def n07() -> list[dict]:
-    """Build notebook 07: optional anomaly detection extension."""
+    """Build the optional anomaly detection extension notebook."""
     return [
         md(
             """
-            # 07 — Optional anomaly detection extension
+            # 06 — Optional anomaly detection extension
 
             **Estimated time:** 75–100 minutes  
             **Prerequisites:** notebooks 00–03; distance, density, and ranking metrics.  
@@ -3280,14 +3283,14 @@ def n08() -> list[dict]:
 
 
 def n09() -> list[dict]:
-    """Build notebook 09: end-to-end production ML project."""
+    """Build the final end-to-end production ML project notebook."""
     return [
         md(
             """
-            # 09 — End-to-end production ML project
+            # 07 — End-to-end production ML project
 
             **Estimated time:** 150–210 minutes  
-            **Prerequisites:** notebooks 00–08.  
+            **Prerequisites:** notebooks 00–06.
             **Depends on:** every prior data, evaluation, leakage, explanation, and monitoring decision.
 
             ## Learning objectives
@@ -3515,8 +3518,8 @@ BUILDERS = {
     "03_imbalanced_learning.ipynb": n03,
     "04_optuna_hyperparameter_optimization.ipynb": n04,
     "05_ensemble_learning.ipynb": n05,
-    "06_anomaly_detection_extension.ipynb": n06,
-    "07_end_to_end_production_ml_project.ipynb": n07,
+    "06_anomaly_detection_extension.ipynb": n07,
+    "07_end_to_end_production_ml_project.ipynb": n09,
 }
 
 

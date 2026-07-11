@@ -15,23 +15,23 @@ syllabus order with a new kernel per notebook.
 | 03 | 9.7 s | Pass |
 | 04 | 16.1 s | Pass |
 | 05 | 16.6 s | Pass |
-| 06 | 5.1 s | Pass |
-| 07 | 4.8 s | Pass |
-| 08 | 3.1 s | Pass |
-| 09 | 3.2 s | Pass |
+| 06 | 5.2 s | Pass |
+| 07 | 3.9 s | Pass |
 
-Total clean execution time was approximately 79 seconds, excluding environment
-installation. Stored outputs contain no error or warning outputs.
+The latest focused revalidation executed notebooks 05–07 in approximately 32
+seconds, excluding environment installation. Stored outputs contain no error
+outputs.
 
 ## Structural and boundary checks
 
 `scripts/validate_course.py` confirmed:
 
-- all ten files parse as JSON and pass `nbformat` validation;
+- the focused notebooks 05–07 in both English and Farsi parse as JSON and pass
+  `nbformat` validation;
 - every code cell has an execution count and no stored error output;
 - every notebook contains objectives, estimated time, prerequisites, leakage
   warnings, exercises, a challenge, summary, and references;
-- notebooks 00–08 contain no `X_test` or `y_test` access;
+- notebooks 00–06 contain no final test scoring;
 - notebook 03 uses imbalanced-learn pipelines and SMOTENC;
 - notebook 04's Optuna objective contains no test access;
 - notebook 05 contains explicit OOF prediction generation and scikit-learn's
@@ -39,7 +39,7 @@ installation. Stored outputs contain no error or warning outputs.
 
 Manual/source audit additionally confirmed that learned preprocessing is inside
 the relevant CV pipelines, each Optuna fold fits its own preprocessor, and the
-test set is first scored in notebook 09.
+test set is first scored in notebook 07.
 
 ## Reproducibility evidence
 
@@ -77,7 +77,7 @@ Reduced mode is intentionally modest. The heaviest notebooks are:
 
 - 04: 8 Optuna trials × 3 folds plus LightGBM early stopping and study diagnostics;
 - 05: OOF predictions, voting, and stacking with 180-tree Random Forest;
-- 06: SHAP on 300 validation rows.
+- 06: Isolation Forest and novelty-mode LOF on controlled contamination.
 
 `FAST_MODE=0` raises CV to five folds, Optuna to 25 trials, ensemble tree counts,
 and SHAP sample sizes. Full mode was not executed in this validation pass and is

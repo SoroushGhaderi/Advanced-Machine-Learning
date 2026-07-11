@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 
 import nbformat
@@ -32,9 +33,12 @@ REQUIRED_MARKERS = [
 ]
 
 
-def main() -> None:
+def main(names: list[str] | None = None) -> None:
     assert [p.name for p in NOTEBOOKS] == EXPECTED, "notebook sequence mismatch"
-    for path in NOTEBOOKS:
+    selected = [ROOT / "notebooks" / name for name in names] if names else NOTEBOOKS
+    unknown = [path.name for path in selected if path.name not in EXPECTED]
+    assert not unknown, f"unknown notebooks: {unknown}"
+    for path in selected:
         with path.open(encoding="utf-8") as handle:
             json.load(handle)  # explicit JSON validation
         nb = nbformat.read(path, as_version=4)
@@ -44,9 +48,20 @@ def main() -> None:
             assert marker.lower() in markdown.lower(), f"{path.name}: missing {marker}"
         code_cells = [cell for cell in nb.cells if cell.cell_type == "code"]
         assert code_cells, f"{path.name}: no code"
-        source = "\n".join(cell.source for cell in code_cells)
-    print(f"validated {len(NOTEBOOKS)} executed notebooks; all checks passed")
+        errors = [output for cell in code_cells for output in cell.get("outputs", [])
+                  if output.get("output_type") == "error"]
+        assert not errors, f"{path.name}: contains stored execution errors"
+        counts = [cell.execution_count for cell in code_cells]
+        non_null_counts = [count for count in counts if count is not None]
+        assert len(non_null_counts) in {0, len(counts)}, (
+            f"{path.name}: partially executed notebook; clear or execute all code cells")
+        assert len(non_null_counts) == len(set(non_null_counts)), (
+            f"{path.name}: duplicate execution counts")
+        if non_null_counts:
+            assert non_null_counts == sorted(non_null_counts), (
+                f"{path.name}: out-of-order execution counts")
+    print(f"validated {len(selected)} notebooks; all checks passed")
 
 
 if __name__ == "__main__":
-    main()
+    main(sys.argv[1:])

@@ -43,7 +43,7 @@ detection is optional because the source data contain no natural anomaly label.
 
 - **Development (60%)**: fitting, cross-validation, features, and tuning.
 - **Validation (20%)**: threshold selection and limited finalist comparison.
-- **Test (20%)**: sealed until notebook 09 and used once for final evaluation.
+- **Test (20%)**: sealed until notebook 07 and used once for final evaluation.
 
 The older Bank Marketing file lacks a complete timestamp and stable customer
 ID. The course explains temporal and grouped validation but does not fabricate
