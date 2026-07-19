@@ -75,7 +75,7 @@ COMMON = code(
     import seaborn as sns
     from sklearn.compose import ColumnTransformer
     from sklearn.impute import SimpleImputer
-    from sklearn.metrics import (average_precision_score, balanced_accuracy_score,
+    from sklearn.metrics import (accuracy_score, average_precision_score, balanced_accuracy_score,
                                  brier_score_loss, confusion_matrix, f1_score, log_loss,
                                  precision_score, recall_score, roc_auc_score)
     from sklearn.pipeline import Pipeline
@@ -188,7 +188,8 @@ COMMON = code(
         '''Compute ranking and threshold-based classification metrics.'''
         prediction = np.asarray(probability) >= threshold
         tn, fp, fn, tp = confusion_matrix(y_true, prediction, labels=[0, 1]).ravel()
-        return {"roc_auc": roc_auc_score(y_true, probability),
+        return {"accuracy": accuracy_score(y_true, prediction),
+                "roc_auc": roc_auc_score(y_true, probability),
                 "average_precision": average_precision_score(y_true, probability),
                 "log_loss": log_loss(y_true, probability),
                 "brier_score": brier_score_loss(y_true, probability),
@@ -1642,28 +1643,40 @@ def n02() -> list[dict]:
             ])
 
             fold_metrics = {}
+            CV_SCORING = {
+                "accuracy": "accuracy",
+                "balanced_accuracy": "balanced_accuracy",
+                "precision": "precision",
+                "recall": "recall",
+                "f1": "f1",
+                "log_loss": "neg_log_loss",
+                "brier_score": "neg_brier_score",
+                "average_precision": "average_precision",
+                "roc_auc": "roc_auc",
+            }
+            NEGATED_METRICS = {"log_loss", "brier_score"}
 
             def cv_summary(name, estimator):
                 scores = cross_validate(
                     estimator, X_dev, y_dev, cv=CV_SPLITS,
-                    scoring=["accuracy", "balanced_accuracy", "precision", "recall", "f1"],
+                    scoring=CV_SCORING,
                     n_jobs=-1,
                 )
                 fold_metrics[name] = pd.DataFrame({
-                    metric: scores[f"test_{metric}"]
-                    for metric in ["accuracy", "balanced_accuracy", "precision", "recall", "f1"]
+                    metric: scores[f"test_{metric}"] * (-1 if metric in NEGATED_METRICS else 1)
+                    for metric in CV_SCORING
                 }).rename_axis("fold")
-                accuracy = scores["test_accuracy"]
-                return {
+                summary = {
                     "experiment": name,
-                    "accuracy_mean": accuracy.mean(),
-                    "accuracy_sd": accuracy.std(ddof=1),
-                    "accuracy_se": accuracy.std(ddof=1) / np.sqrt(len(accuracy)),
-                    "balanced_accuracy": scores["test_balanced_accuracy"].mean(),
-                    "precision": scores["test_precision"].mean(),
-                    "recall": scores["test_recall"].mean(),
-                    "f1": scores["test_f1"].mean(),
+                    "accuracy_mean": fold_metrics[name]["accuracy"].mean(),
+                    "accuracy_sd": fold_metrics[name]["accuracy"].std(ddof=1),
+                    "accuracy_se": fold_metrics[name]["accuracy"].sem(ddof=1),
                 }
+                summary.update({
+                    metric: fold_metrics[name][metric].mean()
+                    for metric in CV_SCORING if metric != "accuracy"
+                })
+                return summary
 
             ablation = pd.DataFrame([cv_summary("raw features", baseline),
                                      cv_summary("domain features", engineered)]).set_index("experiment")
@@ -1831,63 +1844,113 @@ def n02() -> list[dict]:
 
             CatBoost builds statistics for categorical values using ordered target statistics designed to
             reduce target leakage. We pass raw strings and categorical column indices; we do **not** fit a
-            target encoder on the whole dataset. Missing values would need explicit string/category handling.
-            A stratified subset of development data is used for early stopping. The course validation set
-            remains untouched until the final comparison. Log loss is used for early stopping because it is
-            sensitive to probability quality even when the predicted class does not change; accuracy remains
-            the headline reporting metric.
+            target encoder on the whole dataset. Missing categories are made explicit.
+
+            In every outer CV fold, CatBoost selects its stopping iteration from an internal split of that
+            fold's training rows, then refits and scores the untouched fold. CatBoost and logistic regression
+            therefore share outer folds and report probability quality (log loss, Brier score), ranking
+            (PR-AUC, ROC-AUC), and threshold metrics.
             """
         ),
         code(
             """
             from catboost import CatBoostClassifier
-            cat_columns = X_dev.select_dtypes(include="object").columns.tolist()
-            X_dev_cat, X_val_cat = X_dev.copy(), X_val.copy()
-            for c in cat_columns:
-                X_dev_cat[c] = X_dev_cat[c].fillna("__MISSING__")
-                X_val_cat[c] = X_val_cat[c].fillna("__MISSING__")
+            from sklearn.base import BaseEstimator, ClassifierMixin
 
-            X_cat_fit, X_cat_stop, y_cat_fit, y_cat_stop = train_test_split(
-                X_dev_cat, y_dev, test_size=0.15, stratify=y_dev, random_state=SEED
-            )
+            class EarlyStoppedCatBoostClassifier(ClassifierMixin, BaseEstimator):
+                '''Tune CatBoost stopping within each fitted training fold, then refit it.'''
 
-            cat_stop_model = CatBoostClassifier(
-                iterations=180 if FAST_MODE else 450, depth=6, learning_rate=0.06,
-                loss_function="Logloss", eval_metric="Logloss", random_seed=SEED,
-                verbose=False, allow_writing_files=False,
+                def __init__(self, iterations, depth=6, learning_rate=0.06,
+                             validation_fraction=0.15, early_stopping_rounds=40,
+                             random_seed=SEED, thread_count=1):
+                    self.iterations = iterations
+                    self.depth = depth
+                    self.learning_rate = learning_rate
+                    self.validation_fraction = validation_fraction
+                    self.early_stopping_rounds = early_stopping_rounds
+                    self.random_seed = random_seed
+                    self.thread_count = thread_count
+
+                def _prepare(self, X):
+                    if not isinstance(X, pd.DataFrame):
+                        raise TypeError("CatBoost requires a pandas DataFrame with named columns")
+                    missing = set(self.feature_names_in_).difference(X.columns)
+                    if missing:
+                        raise ValueError(f"missing feature columns: {sorted(missing)}")
+                    prepared = X.loc[:, self.feature_names_in_].copy()
+                    for column in self.cat_features_:
+                        prepared[column] = prepared[column].fillna("__MISSING__").astype(str)
+                    return prepared
+
+                def _model(self, iterations, eval_metric=None):
+                    return CatBoostClassifier(
+                        iterations=iterations,
+                        depth=self.depth,
+                        learning_rate=self.learning_rate,
+                        loss_function="Logloss",
+                        eval_metric=eval_metric,
+                        random_seed=self.random_seed,
+                        thread_count=self.thread_count,
+                        verbose=False,
+                        allow_writing_files=False,
+                    )
+
+                def fit(self, X, y):
+                    self.feature_names_in_ = np.asarray(X.columns, dtype=object)
+                    self.cat_features_ = X.select_dtypes(
+                        include=["object", "category", "bool"]
+                    ).columns.tolist()
+                    prepared = self._prepare(X)
+                    X_fit, X_stop, y_fit, y_stop = train_test_split(
+                        prepared, y,
+                        test_size=self.validation_fraction,
+                        stratify=y,
+                        random_state=self.random_seed,
+                    )
+                    selection_model = self._model(self.iterations, eval_metric="Logloss")
+                    selection_model.fit(
+                        X_fit, y_fit,
+                        cat_features=self.cat_features_,
+                        eval_set=(X_stop, y_stop),
+                        early_stopping_rounds=self.early_stopping_rounds,
+                        verbose=False,
+                    )
+                    best_iteration = selection_model.get_best_iteration()
+                    self.best_iterations_ = (
+                        self.iterations if best_iteration < 0 else best_iteration + 1
+                    )
+                    self.model_ = self._model(self.best_iterations_)
+                    self.model_.fit(prepared, y, cat_features=self.cat_features_, verbose=False)
+                    self.classes_ = np.unique(y)
+                    return self
+
+                def predict_proba(self, X):
+                    return self.model_.predict_proba(self._prepare(X))
+
+                def predict(self, X):
+                    return self.model_.predict(self._prepare(X)).astype(int)
+
+            catboost_candidate = EarlyStoppedCatBoostClassifier(
+                iterations=180 if FAST_MODE else 450,
             )
-            cat_stop_model.fit(X_cat_fit, y_cat_fit, cat_features=cat_columns,
-                               eval_set=(X_cat_stop, y_cat_stop),
-                               early_stopping_rounds=40, verbose=False)
-            best_iterations = cat_stop_model.get_best_iteration() + 1
-            cat_model = CatBoostClassifier(
-                iterations=best_iterations, depth=6, learning_rate=0.06,
-                loss_function="Logloss", random_seed=SEED,
-                verbose=False, allow_writing_files=False,
-            )
-            cat_model.fit(X_dev_cat, y_dev, cat_features=cat_columns, verbose=False)
-            print(f"refit CatBoost on all development rows with {best_iterations} trees")
+            catboost_cv = pd.DataFrame([
+                cv_summary("native CatBoost", catboost_candidate)
+            ]).set_index("experiment")
+            display(catboost_cv)
+
+            cat_model = catboost_candidate.fit(X_dev, y_dev)
+            print(f"refit CatBoost on all development rows with {cat_model.best_iterations_} trees")
 
             onehot_model = inspection_model
             raw_onehot_model = baseline.fit(X_dev, y_dev)
-            def threshold_metrics(y_true, probability, threshold=0.5):
-                prediction = probability >= threshold
-                return {
-                    "accuracy": accuracy_score(y_true, prediction),
-                    "balanced_accuracy": balanced_accuracy_score(y_true, prediction),
-                    "precision": precision_score(y_true, prediction, zero_division=0),
-                    "recall": recall_score(y_true, prediction, zero_division=0),
-                    "f1": f1_score(y_true, prediction, zero_division=0),
-                }
-
             validation_probabilities = {
                 "always no": np.zeros(len(y_val)),
                 "raw one-hot logistic": raw_onehot_model.predict_proba(X_val)[:, 1],
                 "engineered one-hot logistic": onehot_model.predict_proba(X_val)[:, 1],
-                "native CatBoost": cat_model.predict_proba(X_val_cat)[:, 1],
+                "native CatBoost": cat_model.predict_proba(X_val)[:, 1],
             }
             comparison = pd.DataFrame({
-                name: threshold_metrics(y_val, probability)
+                name: classification_metrics(y_val, probability)
                 for name, probability in validation_probabilities.items()
             }).T
             display(comparison)
