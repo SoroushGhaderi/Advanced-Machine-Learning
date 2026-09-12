@@ -21,7 +21,7 @@ EXPECTED = [
     "06_anomaly_detection_extension.ipynb",
     "07_end_to_end_production_ml_project.ipynb",
 ]
-REQUIRED_MARKERS = [
+DEFAULT_REQUIRED_MARKERS = [
     "Learning objectives",
     "Estimated time",
     "Prerequisites",
@@ -31,6 +31,27 @@ REQUIRED_MARKERS = [
     "Summary",
     "References",
 ]
+REQUIRED_MARKERS_BY_NOTEBOOK = {
+    "00_course_setup_and_dataset.ipynb": [
+        "Start with the decision",
+        "Audit leakage",
+        "Protect the evaluation",
+    ],
+    "01_gradient_boosting_fundamentals.ipynb": [
+        "What this notebook teaches",
+        "Boosting is a sequential additive model",
+    ],
+    "02_advanced_feature_engineering.ipynb": [
+        "What this notebook teaches",
+        "Build a fold-safe preprocessing pipeline",
+    ],
+    # Notebook 03 is intentionally a concise presentation notebook.
+    "03_imbalanced_learning.ipynb": [
+        "The core problem",
+        "Presentation takeaways",
+        "Calibration is a deployment requirement",
+    ],
+}
 
 
 def main(names: list[str] | None = None) -> None:
@@ -44,7 +65,10 @@ def main(names: list[str] | None = None) -> None:
         nb = nbformat.read(path, as_version=4)
         nbformat.validate(nb)
         markdown = "\n".join(cell.source for cell in nb.cells if cell.cell_type == "markdown")
-        for marker in REQUIRED_MARKERS:
+        required_markers = REQUIRED_MARKERS_BY_NOTEBOOK.get(
+            path.name, DEFAULT_REQUIRED_MARKERS
+        )
+        for marker in required_markers:
             assert marker.lower() in markdown.lower(), f"{path.name}: missing {marker}"
         code_cells = [cell for cell in nb.cells if cell.cell_type == "code"]
         assert code_cells, f"{path.name}: no code"

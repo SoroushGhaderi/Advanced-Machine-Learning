@@ -5,7 +5,8 @@ Validated on macOS arm64 with Python 3.13.1 in `FAST_MODE=1`.
 ## Ordered clean-kernel execution
 
 All generated outputs were cleared, then every notebook was executed in
-syllabus order with a new kernel per notebook.
+syllabus order with a new kernel per notebook. Outputs are stripped from the
+committed notebooks after validation.
 
 | Notebook | Runtime | Result |
 |---|---:|---|
@@ -19,16 +20,17 @@ syllabus order with a new kernel per notebook.
 | 07 | 3.9 s | Pass |
 
 The latest focused revalidation executed notebooks 05–07 in approximately 32
-seconds, excluding environment installation. Stored outputs contain no error
-outputs.
+seconds, excluding environment installation. Local execution produced no error
+outputs; the committed notebooks remain outputless.
 
 ## Structural and boundary checks
 
 `scripts/validate_course.py` confirmed:
 
-- the focused notebooks 05–07 in both English and Farsi parse as JSON and pass
+- the focused English notebooks 05–07 parse as JSON and pass
   `nbformat` validation;
-- every code cell has an execution count and no stored error output;
+- every code cell is either unexecuted in the committed notebook or has a
+  locally validated execution count, with no stored error output;
 - every notebook contains objectives, estimated time, prerequisites, leakage
   warnings, exercises, a challenge, summary, and references;
 - notebooks 00–06 contain no final test scoring;
