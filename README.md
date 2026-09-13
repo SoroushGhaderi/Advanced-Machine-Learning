@@ -92,7 +92,8 @@ FAST_MODE=1 .venv/bin/python scripts/execute_course.py
 
 The first notebook downloads the UCI archive and caches only the documented
 CSV under `data/raw/`. No remote code is executed. Raw data, model artifacts,
-and generated reports are Git-ignored.
+generated reports, optional visual assets, and notebook outputs are excluded
+from Git.
 
 ## Learning path
 
@@ -112,12 +113,13 @@ challenge, summary, and authoritative references.
 .
 ├── notebooks/              # executable course sequence
 ├── scripts/                # notebook builder, executor, validator
+├── docs/                   # course details, catalog, rubric, validation report
 ├── data/raw/               # cached source data (ignored)
 ├── models/                 # generated artifacts (ignored)
 ├── reports/                # generated metadata/reports (ignored)
+├── assets/                 # optional local visuals (ignored; see assets/README.md)
+├── CONTEXT.md              # canonical project glossary and evaluation terms
 ├── data/README.md
-├── CAPSTONE_RUBRIC.md
-├── VALIDATION_REPORT.md
 └── requirements.txt
 ```
 
@@ -126,11 +128,11 @@ challenge, summary, and authoritative references.
 Extend the final workflow with one justified feature or model change, evaluate
 it without contaminating test evidence, document its explanations and
 monitoring consequences, and submit the artifact plus report. Assessment uses
-[CAPSTONE_RUBRIC.md](CAPSTONE_RUBRIC.md).
+[docs/CAPSTONE_RUBRIC.md](docs/CAPSTONE_RUBRIC.md).
 
 ## Reproducibility limits
 
 Seeds are fixed wherever supported. Parallel floating-point reductions and
-library/platform differences can still create tiny numeric variation. The
-stored notebook outputs were generated in reduced mode; full mode is expected
-to take materially longer, especially Optuna and stacking.
+library/platform differences can still create tiny numeric variation. Notebook
+outputs are generated locally and stripped before version control; full mode is
+expected to take materially longer, especially Optuna and stacking.

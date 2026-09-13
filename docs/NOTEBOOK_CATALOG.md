@@ -1,6 +1,6 @@
 # Notebook Catalog
 
-This repository contains a guided sequence of notebooks for advanced machine learning practice. The `notebooks/` folder holds the main English version, and `notebooks_farsi/` holds the Persian translation of the same material.
+This repository contains a guided sequence of notebooks for advanced machine learning practice. The `notebooks/` folder holds the English course sequence.
 
 ## 00 - Course Setup and Dataset
 
@@ -108,4 +108,3 @@ This repository contains a guided sequence of notebooks for advanced machine lea
 - `05` combines models for stronger results.
 - `06` extends the course to anomaly detection.
 - `07` pulls the full workflow together in an end-to-end project.
-

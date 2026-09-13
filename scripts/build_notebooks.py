@@ -84,6 +84,8 @@ COMMON = code(
     SEED = 42
     TARGET = "y"
     LEAKAGE_COLUMNS = ["duration"]
+    FP_COST = 1.0
+    FN_COST = 5.0
 
     def project_root():
         '''Return the course root when present, otherwise the notebook directory.'''
@@ -184,7 +186,8 @@ COMMON = code(
             ("categorical", categorical_pipe, categorical),
         ], sparse_threshold=0.3)
 
-    def classification_metrics(y_true, probability, threshold=0.5):
+    def classification_metrics(y_true, probability, threshold=0.5,
+                               fp_cost=FP_COST, fn_cost=FN_COST):
         '''Compute ranking and threshold-based classification metrics.'''
         prediction = np.asarray(probability) >= threshold
         tn, fp, fn, tp = confusion_matrix(y_true, prediction, labels=[0, 1]).ravel()
@@ -198,13 +201,17 @@ COMMON = code(
                 "precision": precision_score(y_true, prediction, zero_division=0),
                 "recall": recall_score(y_true, prediction, zero_division=0),
                 "specificity": tn / (tn + fp) if (tn + fp) else np.nan,
-                "cost": float(fp + 5 * fn)}
+                "cost": float(fp_cost * fp + fn_cost * fn)}
 
-    def threshold_table(y_true, probability, thresholds=None):
-        '''Evaluate classification metrics across a list of decision thresholds.'''
-        thresholds = np.linspace(0.05, 0.80, 76) if thresholds is None else thresholds
+    def threshold_table(y_true, probability, thresholds=None,
+                        fp_cost=FP_COST, fn_cost=FN_COST):
+        '''Evaluate all observed score cutoffs for a decision threshold.'''
+        if thresholds is None:
+            scores = np.asarray(probability, dtype=float)
+            thresholds = np.unique(np.r_[0.0, scores, 1.0])
         return pd.DataFrame([{"threshold": float(t),
-                              **classification_metrics(y_true, probability, float(t))}
+                              **classification_metrics(y_true, probability, float(t),
+                                                       fp_cost=fp_cost, fn_cost=fn_cost)}
                              for t in thresholds])
 
     def add_domain_features(frame):
@@ -247,6 +254,15 @@ COMMON_NO_LGBM_WARNING = {
         'warnings.filterwarnings("ignore", message="X does not have valid feature names, but LGBMClassifier")\n',
         "",
     ),
+}
+
+COMMON_NO_PLOTS = {
+    **COMMON_NO_LGBM_WARNING,
+    "id": uuid.uuid4().hex[:8],
+    "source": COMMON_NO_LGBM_WARNING["source"]
+    .replace("import matplotlib.pyplot as plt\n", "")
+    .replace("import seaborn as sns\n", "")
+    .replace('sns.set_theme(style="whitegrid", context="notebook")\n', ""),
 }
 
 
@@ -323,7 +339,7 @@ def n00() -> list[dict]:
             2. When is it safe to use?
             3. What should stop us from using it?
 
-            ![A raw dataset becomes a governed data asset through catalog metadata, enabling discovery, leakage-safe machine learning, and governance.](../assets/data_catalog_learning_flow.png)
+            Optional local visual: `assets/00_course_setup_and_dataset/00_data_catalog_learning_flow.png`.
 
             *Teaching note:* the catalog is not just documentation. It is part of the modeling contract.
             """
@@ -874,7 +890,7 @@ def n01_gradient_boosting() -> list[dict]:
             """
             ### Gradient boosting workflow at a glance
 
-            ![Gradient boosting workflow: begin with a constant prediction, calculate probability errors, fit a shallow correction tree, shrink its output, update the ensemble, and repeat sequentially.](../assets/gradient_boosting_process.png)
+            Optional local visual: `assets/01_gradient_boosting_fundamentals/00_sequential_additive_boosting_process.png`.
 
             Read the upper process from left to right, then follow the loop back from step 6: after every
             update, the next tree sees newly calculated errors. The lower comparison highlights the structural
@@ -1336,7 +1352,7 @@ def n02() -> list[dict]:
             """
             ### CatBoost workflow at a glance
 
-            ![CatBoost workflow: raw mixed features are permuted, converted into leakage-safe ordered category statistics, processed by sequential trees, and converted into a probability and thresholded prediction.](../assets/catboost_workflow.png)
+            Optional local visual: `assets/02_advanced_feature_engineering/04_catboost_ordered_category_statistics_workflow.png`.
 
             Read the upper path from left to right. The lower inset isolates the central safety idea: naive
             target encoding calculates a category rate using every label—including the current row—whereas
@@ -2034,18 +2050,15 @@ def n03() -> list[dict]:
     return [
         md(
             """
-            # 03 — Imbalanced learning
+            # 03 — Imbalanced Learning
 
-            **Estimated time:** 100–140 minutes  
-            **Prerequisites:** notebooks 00–02; cross-validation, metrics, and pipelines.  
-            **Depends on:** the split contract from notebook 00 and feature pipeline from notebook 02.
+            ## The core problem
 
-            ## Learning objectives
+            When positive outcomes are rare, accuracy can look good while the model misses most positives.
+            This notebook compares safe ways to train and operate a classifier without leaking information.
 
-            - Compare class weights, thresholds, under/oversampling, SMOTE, and SMOTENC.
-            - Resample only within CV training folds using `imblearn.pipeline.Pipeline`.
-            - Evaluate classification behavior, probability quality, and business cost separately.
-            - Recognize when synthetic interpolation is semantically invalid.
+            **Key idea:** model training, probability estimates, and the final decision threshold are
+            different choices and should be evaluated separately.
             """
         ),
         COMMON,
@@ -2092,15 +2105,16 @@ def n03() -> list[dict]:
         ),
         md(
             """
-            ## Why sampler placement matters
+            ## 1. Compare training interventions safely
 
-            Resampling before cross-validation lets synthetic or duplicated observations influence both
-            training and validation folds. That is leakage. An imbalanced-learn pipeline calls the sampler
-            only during `fit`, so each fold's validation rows remain untouched.
+            - **Class weights** make mistakes on rare positives more costly during fitting.
+            - **Random under/oversampling** changes the examples seen during fitting.
+            - **SMOTE** creates synthetic minority examples between nearby points.
 
-            SMOTE interpolates between minority neighbors. Applied after one-hot encoding, it can create
-            fractional pseudo-categories. That may run numerically but is semantically dubious. We include it
-            as a cautionary comparison and use SMOTENC for mixed data.
+            Every sampler must run **inside** cross-validation, on each training fold only. Resampling before
+            splitting leaks duplicated or synthetic observations into validation. The ordinary-SMOTE pipeline
+            below is intentionally a cautionary baseline: after one-hot encoding it can create fractional
+            category values that do not represent real records.
             """
         ),
         code(
@@ -2133,14 +2147,20 @@ def n03() -> list[dict]:
                 "precision": make_scorer(precision_score, zero_division=0),
                 "recall": "recall",
                 "f1": "f1",
+                "average_precision": "average_precision",
+                "brier_score": make_scorer(brier_score_loss, greater_is_better=False),
                 "log_loss": "neg_log_loss",
             }
+            lower_is_better = {"brier_score", "log_loss"}
             cv_rows = []
             for name, estimator in candidates.items():
-                scores = cross_validate(estimator, X_dev, y_dev, cv=cv, scoring=scoring, n_jobs=-1)
+                scores = cross_validate(
+                    estimator, X_dev, y_dev, cv=cv, scoring=scoring,
+                    n_jobs=-1, error_score="raise",
+                )
                 row = {"method": name}
                 for metric in scoring:
-                    values = scores[f"test_{metric}"] * (-1 if metric == "log_loss" else 1)
+                    values = scores[f"test_{metric}"] * (-1 if metric in lower_is_better else 1)
                     row[f"{metric}_mean"] = values.mean()
                     row[f"{metric}_std"] = values.std(ddof=1)
                 cv_rows.append(row)
@@ -2150,17 +2170,15 @@ def n03() -> list[dict]:
         ),
         md(
             """
-            Resampling changes the class prior seen during fitting, so raw probabilities can become badly
-            calibrated even when recall improves. Class weighting has a similar effect on the loss. Threshold
-            metrics must therefore be read alongside log loss and calibration.
+            ## 2. Preserve categorical meaning and check probabilities
 
-            ## SMOTENC: preserve categorical semantics
+            Use **SMOTENC** for mixed numeric and categorical data. It is told which intermediate columns are
+            categorical, then the categories are one-hot encoded before logistic regression. Ordinal codes are
+            only temporary labels—not meaningful numeric distances.
 
-            The preprocessing below outputs numeric columns first and ordinal-encoded categories second.
-            `SMOTENC` is told exactly which intermediate columns are categorical. After sampling, numeric
-            columns are scaled and categorical codes are one-hot encoded. This last step matters: ordinal
-            codes are identifiers, so feeding the codes directly to logistic regression would impose a false
-            distance and ordering between categories.
+            Resampling and class weighting can improve recall while distorting probabilities. A model can rank
+            customers correctly yet systematically over- or under-estimate their chance of conversion. Check
+            threshold metrics together with log loss and calibration.
             """
         ),
         code(
@@ -2191,10 +2209,13 @@ def n03() -> list[dict]:
                 ("postprocess", post_smotenc),
                 ("model", LogisticRegression(max_iter=1200, random_state=SEED)),
             ])
-            scores = cross_validate(smotenc_model, X_dev, y_dev, cv=cv, scoring=scoring, n_jobs=-1)
+            scores = cross_validate(
+                smotenc_model, X_dev, y_dev, cv=cv, scoring=scoring,
+                n_jobs=-1, error_score="raise",
+            )
             smotenc_row = {}
             for metric in scoring:
-                values = scores[f"test_{metric}"] * (-1 if metric == "log_loss" else 1)
+                values = scores[f"test_{metric}"] * (-1 if metric in lower_is_better else 1)
                 smotenc_row[f"{metric}_mean"] = values.mean()
                 smotenc_row[f"{metric}_std"] = values.std(ddof=1)
             cv_comparison.loc["SMOTENC"] = smotenc_row
@@ -2203,11 +2224,11 @@ def n03() -> list[dict]:
         ),
         md(
             """
-            ### Visual comparison across cross-validation folds
+            ## 3. Read cross-validation results as a trade-off
 
-            A method can gain recall simply by predicting the positive class much more often. The panels
-            below make the resulting precision–recall trade-off visible. Error bars show one standard
-            deviation across folds; they describe split sensitivity rather than a confidence interval.
+            Higher recall may simply mean that the model predicts "yes" more often, creating more false
+            positives. Compare precision, recall, F1, and balanced accuracy together. Fold standard deviation
+            shows sensitivity to the split; it is not a confidence interval.
             """
         ),
         code(
@@ -2230,23 +2251,36 @@ def n03() -> list[dict]:
             plt.tight_layout()
             """
         ),
-        md("## Validation behavior and threshold adjustment"),
+        md(
+            """
+            ## 4. Choose the operating threshold separately
+
+            The model outputs a probability; the threshold turns that probability into an action. Here, the
+            threshold is selected using out-of-fold development predictions, then evaluated once on validation.
+            This avoids using validation data to both tune and report the decision rule.
+            """
+        ),
         code(
             """
             from src.course_utils import threshold_table
 
-            def operational_metrics(y_true, probability, threshold=0.5):
-                # Return threshold and probability metrics without area-under-curve scores.
+            def operational_metrics(y_true, probability, threshold=0.5,
+                                    fp_cost=FP_COST, fn_cost=FN_COST):
+                '''Return threshold, ranking, calibration, and cost metrics.'''
                 prediction = np.asarray(probability) >= threshold
                 tn, fp, fn, tp = confusion_matrix(
                     y_true, prediction, labels=[0, 1]
                 ).ravel()
                 return {
-                    "log_loss": log_loss(y_true, probability),
-                    "precision": precision_score(y_true, prediction, zero_division=0),
+                "average_precision": average_precision_score(y_true, probability),
+                "brier_score": brier_score_loss(y_true, probability),
+                "log_loss": log_loss(y_true, probability),
+                "balanced_accuracy": balanced_accuracy_score(y_true, prediction),
+                "f1": f1_score(y_true, prediction, zero_division=0),
+                "precision": precision_score(y_true, prediction, zero_division=0),
                     "recall": recall_score(y_true, prediction, zero_division=0),
                     "specificity": tn / (tn + fp) if (tn + fp) else np.nan,
-                    "cost": float(fp + 5 * fn),
+                    "cost": float(fp_cost * fp + fn_cost * fn),
                 }
 
             # Choose the threshold from out-of-fold development predictions. The validation
@@ -2255,11 +2289,14 @@ def n03() -> list[dict]:
                 clone(candidates["plain"]), X_dev, y_dev, cv=cv,
                 method="predict_proba", n_jobs=-1,
             )[:, 1]
-            threshold_candidates = threshold_table(y_dev, oof_probability)
+            threshold_candidates = threshold_table(
+                y_dev, oof_probability, fp_cost=FP_COST, fn_cost=FN_COST,
+            )
             selected = threshold_candidates.sort_values(["cost", "threshold"]).iloc[0]
             selected_threshold = float(selected["threshold"])
             print(f"OOF development cost-selected threshold: {selected_threshold:.2f}")
 
+            # This is a finalist comparison for teaching; do not tune repeatedly on validation.
             validation_rows = []
             fitted = {}
             for name in ["dummy_prior", "plain", "class_weight", "random_over"]:
@@ -2300,13 +2337,11 @@ def n03() -> list[dict]:
         ),
         md(
             """
-            ### Reading the threshold result correctly
+            ## 5. Turn metrics into a business decision
 
-            The false-negative cost of 5 and false-positive cost of 1 are teaching assumptions, not facts
-            learned from the dataset. In a real deployment, replace them with validated economic or clinical
-            consequences and include capacity constraints. The OOF-selected threshold is evaluated once on
-            validation; repeatedly revisiting it after seeing validation performance would gradually turn the
-            validation set into training data.
+            The example assigns a false negative a cost of 5 and a false positive a cost of 1. These are
+            teaching assumptions, not facts from the data. In practice, validate the costs and include action
+            capacity—for example, how many customers a team can contact.
             """
         ),
         code(
@@ -2344,64 +2379,30 @@ def n03() -> list[dict]:
         ),
         md(
             """
-            ### What this experiment establishes—and what it does not
+            ## 6. Calibration is a deployment requirement
 
-            - **Classification:** precision, recall, F1, and balanced accuracy depend on a threshold. They
-              expose the operational trade-off directly and should be interpreted with class prevalence.
-            - **Probability quality:** log loss and calibration diagnose whether probabilities can support
-              expected-value decisions. Resampling can improve recall while harming probability quality.
-            - **Uncertainty:** fold standard deviations describe split sensitivity, not a formal confidence
-              interval. Repeated or nested CV is appropriate when selection uncertainty matters.
-            - **Scope:** this is predictive evaluation under an i.i.d. stratified split. It does not estimate
-              the causal effect of calling a customer, and the source data cannot support grouped or temporal
-              validation because stable customer IDs and complete timestamps are absent.
-
-            For deployment, log the dataset hash, split seed, package versions, candidate parameters, fold-level
-            scores, selected threshold, cost assumptions, and the serialized end-to-end pipeline. Monitor both
-            score calibration and the operational precision/recall trade-off as prevalence changes.
+            Calibration asks whether predicted probabilities match observed frequencies. It matters when
+            probabilities support expected-value decisions or prioritization. If the final choice includes a
+            sampler, calibration method, and threshold, select the complete pipeline inside nested CV (or an
+            equivalent split design).
             """
         ),
         md(
             """
-            **When not to synthesize:** avoid SMOTE when neighborhoods are not meaningful, minority data
-            contain label noise, constraints can be violated, categories have high cardinality, temporal
-            order matters, or calibrated probabilities are central and recalibration data are scarce.
-            Threshold adjustment is often the simplest operational intervention when ranking is already good.
+            ## Presentation takeaways
 
-            ## Common mistakes and leakage warnings
-
-            - Resampling once before CV or before the train/validation split.
-            - Applying ordinary SMOTE to raw ordinal category codes.
-            - Comparing recall at 0.5 while ignoring precision and calibration.
-            - Assuming the balanced training distribution is the deployment prevalence.
-            - Tuning sampling ratio and threshold on the test set.
-
-            ## Exercises
-
-            1. Vary `sampling_strategy` and plot balanced accuracy versus log loss with fold-level uncertainty.
-            2. Calibrate the class-weighted model using nested CV or a dedicated calibration split; compare
-               reliability curves, log loss, and Brier score before and after calibration.
-            3. Add bootstrap confidence intervals for validation recall, precision, and business cost.
-            4. **Challenge:** design a repeated nested-CV experiment comparing threshold tuning with SMOTENC,
-               including uncertainty and a fixed business cost.
-
-            ## Summary
-
-            Class weighting and resampling alter the fitting objective; threshold adjustment alters only the
-            decision rule. None is automatically best. Samplers belong inside CV pipelines, and mixed data
-            require categorical-aware synthesis when synthesis is justified at all.
-
-            ## References
-
-            - [imbalanced-learn pipeline](https://imbalanced-learn.org/stable/references/generated/imblearn.pipeline.Pipeline.html)
-            - [SMOTE](https://imbalanced-learn.org/stable/references/generated/imblearn.over_sampling.SMOTE.html)
-            - [SMOTENC](https://imbalanced-learn.org/stable/references/generated/imblearn.over_sampling.SMOTENC.html)
+            1. Keep samplers inside cross-validation pipelines.
+            2. Use SMOTENC—not ordinary SMOTE—for categorical features when synthesis is justified.
+            3. Compare the precision–recall trade-off, probability calibration, and business cost separately.
+            4. Start with threshold adjustment when ranking is already good.
+            5. Avoid synthetic sampling when neighbours are not meaningful, data are temporal, or constraints
+               could create impossible records.
             """
         ),
     ]
 
 
-def n04() -> list[dict]:
+def _n04_legacy() -> list[dict]:
     """Build notebook 04: Optuna hyperparameter optimization."""
     return [
         md(
@@ -2639,6 +2640,32 @@ def n04() -> list[dict]:
     ]
 
 
+def n04() -> list[dict]:
+    """Build notebook 04: Optuna hyperparameter optimization."""
+    return [
+        md("# 04 — Optuna: leakage-safe hyperparameter tuning\n\n**Estimated time:** 90–120 minutes  \n**Prerequisites:** notebooks 00–03; cross-validation, pipelines, and probability metrics.  \n**Depends on:** the prediction-time feature contract and development/validation/test split.\n\n## Learning objectives\n\n- Define an Optuna objective that respects development, validation, and test boundaries.\n- Fit preprocessing and early stopping inside each development fold.\n- Inspect trial quality, pruning, parameter importance, and repeated-seed stability.\n- Promote one candidate to validation without turning validation into a tuning loop.\n\n## Goal\n\nUse Optuna to compare CatBoost configurations while protecting the evaluation boundary.\n\nThe core workflow is:\n\n1. Build a baseline.\n2. Tune only with development cross-validation.\n3. Inspect trial diagnostics.\n4. Compare a finalized candidate on validation.\n5. Keep the test set sealed until the final workflow is frozen.\n\n> **Senior principle:** Hyperparameter tuning is adaptive model selection. The best observed score is not automatically an unbiased estimate of future performance.\n"),
+        md("## 1. Experiment setup\n\nThis cell defines the reproducible experiment: random seed, data loading, legal features, and preprocessing helpers. The post-call `duration` feature is excluded because it is unavailable at prediction time.\n\nThe notebook uses three boundaries:\n\n- **Development:** fitting, cross-validation, and tuning.\n- **Validation:** limited finalist comparison.\n- **Test:** one final evaluation after all decisions are frozen.\n"),
+        COMMON_NO_PLOTS,
+        md("## 2. Define the data boundary\n\nThe Optuna objective must never read validation or test rows. Cross-validation inside development provides repeated held-out evidence while preserving the outer validation set for a later decision.\n\nThis separation prevents the search process from learning the noise of the final evaluation set.\n"),
+        code("from catboost import CatBoostClassifier\nfrom sklearn.model_selection import StratifiedKFold\nfrom sklearn.metrics import log_loss\n\ndevelopment, validation, _sealed_test = make_splits(load_bank_data(), reduced=FAST_MODE)\nX_dev, y_dev = split_xy(development)\nX_val, y_val = split_xy(validation)\nimport catboost\nprint(\"Library versions:\", catboost.__version__)\n"),
+        md("## 3. Establish an honest baseline\n\nA baseline gives the search a reference point. Without it, a complex tuning process can produce an impressive-looking score without demonstrating meaningful improvement.\n\nFor probabilistic classification, `log_loss` evaluates the quality of predicted probabilities. It penalizes confident wrong predictions more heavily than uncertain ones. Threshold metrics such as F1, recall, and business cost answer a different question: how probabilities become decisions.\n"),
+        code("from sklearn.model_selection import train_test_split\n\nBASELINE_PARAMS = {\n    \"loss_function\": \"Logloss\", \"eval_metric\": \"Logloss\",\n    \"learning_rate\": 0.04, \"depth\": 6, \"min_data_in_leaf\": 30,\n    \"l2_leaf_reg\": 3.0, \"random_seed\": SEED, \"thread_count\": -1,\n    \"allow_writing_files\": False, \"verbose\": False,\n    \"bootstrap_type\": \"Bernoulli\",\n}\n\n\ndef fit_with_development_stopping(params, max_iterations, early_stopping_rounds):\n    \"\"\"Select iterations inside development, then refit on all development rows.\"\"\"\n    fit_idx, stop_idx = train_test_split(\n        np.arange(len(development)), test_size=0.20,\n        stratify=y_dev, random_state=SEED + 100,\n    )\n    inner_pre = make_preprocessor(development.iloc[fit_idx], scale_numeric=False)\n    X_fit_e = inner_pre.fit_transform(X_dev.iloc[fit_idx], y_dev.iloc[fit_idx])\n    X_stop_e = inner_pre.transform(X_dev.iloc[stop_idx])\n\n    stopping_model = CatBoostClassifier(**params, iterations=max_iterations)\n    stopping_model.fit(\n        X_fit_e, y_dev.iloc[fit_idx], eval_set=[(X_stop_e, y_dev.iloc[stop_idx])],\n        use_best_model=True, early_stopping_rounds=early_stopping_rounds, verbose=False,\n    )\n    selected_iterations = max(1, int(stopping_model.get_best_iteration()) + 1)\n\n    preprocessor = make_preprocessor(development, scale_numeric=False)\n    X_dev_encoded = preprocessor.fit_transform(X_dev, y_dev)\n    X_val_encoded = preprocessor.transform(X_val)\n    final_model = CatBoostClassifier(**params, iterations=selected_iterations)\n    final_model.fit(X_dev_encoded, y_dev, verbose=False)\n    return final_model, preprocessor, X_dev_encoded, X_val_encoded, selected_iterations\n\n\nMAX_ITERATIONS = 800\nEARLY_STOPPING_ROUNDS = 35\ncatboost_baseline, preprocessor, X_dev_encoded, X_val_encoded, baseline_iterations = (\n    fit_with_development_stopping(BASELINE_PARAMS, MAX_ITERATIONS, EARLY_STOPPING_ROUNDS)\n)\ncat_p = catboost_baseline.predict_proba(X_val_encoded)[:, 1]\nprint(\"Baseline iterations selected inside development:\", baseline_iterations)\npd.Series(classification_metrics(y_val, cat_p), name=\"untuned CatBoost\")"),
+        md("### Reading the baseline\n\nTreat this result as a reference, not as a final claim. A model can have good log loss but poor recall at threshold 0.5, or good recall but poor calibration. The operating threshold should be selected separately using the business objective.\n"),
+        md("## 4. Build the Optuna objective\n\nOptuna is responsible for proposing parameters, running the same experiment protocol for every trial, and using trial history to choose future proposals. It is not a magic model improver.\n\nInside each fold:\n\n- The encoder is fitted only on the fold’s fitting rows.\n- The stopping fold is transformed with that encoder.\n- Early stopping monitors only the stopping fold.\n- The fold’s log loss is returned to the study.\n\nThis is leakage-safe because no preprocessing statistic or model-selection signal comes from validation or test data.\n"),
+        code("import hashlib\nimport optuna\n\noptuna.logging.set_verbosity(optuna.logging.WARNING)\nN_TRIALS = 8 if FAST_MODE else 25\nRUN_STABILITY_AUDIT = os.getenv(\n    \"RUN_STABILITY_AUDIT\", \"1\" if FAST_MODE else \"0\"\n).lower() not in {\"0\", \"false\", \"no\"}\nSTABILITY_SEEDS = [SEED + 1, SEED + 2]\nARTIFACT_DIR = project_root() / \"reports\" / \"optuna_04\"\nARTIFACT_DIR.mkdir(parents=True, exist_ok=True)\nEXPERIMENT_VERSION = \"04-senior-fixes-v1\"\n\nBASE_CONFIG = {\n    \"notebook\": \"04_optuna_hyperparameter_optimization\",\n    \"experiment_version\": EXPERIMENT_VERSION,\n    \"dataset_sha256\": file_sha256(bank_data_path()),\n    \"fast_mode\": FAST_MODE,\n    \"cv_folds\": CV_FOLDS,\n    \"n_trials\": N_TRIALS,\n    \"max_iterations\": MAX_ITERATIONS,\n    \"early_stopping_rounds\": EARLY_STOPPING_ROUNDS,\n    \"metric\": \"log_loss\",\n    \"categorical_encoding\": \"one_hot\",\n    \"native_catboost_categoricals\": False,\n    \"stability_seeds\": STABILITY_SEEDS,\n}\n\n\ndef make_objective(seed):\n    cv_for_seed = StratifiedKFold(\n        n_splits=CV_FOLDS, shuffle=True, random_state=seed\n    )\n\n    def objective(trial):\n        params = {\n            \"loss_function\": \"Logloss\", \"eval_metric\": \"Logloss\",\n            \"thread_count\": -1, \"random_seed\": seed, \"iterations\": MAX_ITERATIONS,\n            \"allow_writing_files\": False, \"verbose\": False,\n            \"bootstrap_type\": \"Bernoulli\",\n            \"learning_rate\": trial.suggest_float(\"learning_rate\", 0.02, 0.12, log=True),\n            \"depth\": trial.suggest_int(\"depth\", 4, 8),\n            \"min_data_in_leaf\": trial.suggest_int(\"min_data_in_leaf\", 10, 80),\n            \"subsample\": trial.suggest_float(\"subsample\", 0.7, 1.0),\n            \"rsm\": trial.suggest_float(\"rsm\", 0.7, 1.0),\n            \"l2_leaf_reg\": trial.suggest_float(\"l2_leaf_reg\", 1e-2, 10.0, log=True),\n            \"random_strength\": trial.suggest_float(\"random_strength\", 1e-3, 5.0, log=True),\n        }\n        fold_scores = []\n        best_iterations = []\n        for fold, (fit_idx, stop_idx) in enumerate(cv_for_seed.split(X_dev, y_dev)):\n            X_fit, X_stop = X_dev.iloc[fit_idx], X_dev.iloc[stop_idx]\n            y_fit, y_stop = y_dev.iloc[fit_idx], y_dev.iloc[stop_idx]\n            fold_pre = make_preprocessor(development.iloc[fit_idx], scale_numeric=False)\n            X_fit_e = fold_pre.fit_transform(X_fit, y_fit)\n            X_stop_e = fold_pre.transform(X_stop)\n            model = CatBoostClassifier(**params)\n            model.fit(\n                X_fit_e, y_fit, eval_set=[(X_stop_e, y_stop)],\n                use_best_model=True, early_stopping_rounds=EARLY_STOPPING_ROUNDS,\n                verbose=False,\n            )\n            fold_scores.append(log_loss(y_stop, model.predict_proba(X_stop_e)[:, 1]))\n            best_iterations.append(max(1, int(model.get_best_iteration()) + 1))\n            trial.report(float(np.mean(fold_scores)), step=fold)\n            if trial.should_prune():\n                raise optuna.TrialPruned()\n        trial.set_user_attr(\"fold_log_loss_std\", float(np.std(fold_scores, ddof=1)))\n        trial.set_user_attr(\"mean_best_iterations\", int(round(np.mean(best_iterations))))\n        trial.set_user_attr(\"std_best_iterations\", float(np.std(best_iterations, ddof=1)))\n        return float(np.mean(fold_scores))\n\n    return objective\n\n\ndef persist_study(study, config):\n    trials = study.trials_dataframe(\n        attrs=(\"number\", \"value\", \"state\", \"params\", \"duration\")\n    )\n    trials[\"fold_log_loss_std\"] = [\n        trial.user_attrs.get(\"fold_log_loss_std\", np.nan) for trial in study.trials\n    ]\n    trials.to_csv(ARTIFACT_DIR / f\"{study.study_name}_trials.csv\", index=False)\n    complete = [\n        trial for trial in study.trials\n        if trial.state == optuna.trial.TrialState.COMPLETE\n    ]\n    best = study.best_trial if complete else None\n    write_json(\n        {\n            \"study_name\": study.study_name,\n            \"config\": config,\n            \"environment\": environment_metadata(),\n            \"best_value\": None if best is None else best.value,\n            \"best_params\": {} if best is None else best.params,\n            \"best_user_attrs\": {} if best is None else best.user_attrs,\n        },\n        ARTIFACT_DIR / f\"{study.study_name}_metadata.json\",\n    )\n\n\ndef run_study(seed):\n    config = {**BASE_CONFIG, \"seed\": seed}\n    config_hash = hashlib.sha256(\n        json.dumps(config, sort_keys=True).encode(\"utf-8\")\n    ).hexdigest()[:12]\n    study_name = f\"bank_marketing_{EXPERIMENT_VERSION}_{config_hash}\"\n    study_db = ARTIFACT_DIR / f\"{study_name}.db\"\n    study = optuna.create_study(\n        study_name=study_name,\n        storage=f\"sqlite:///{study_db}\",\n        load_if_exists=True,\n        direction=\"minimize\",\n        sampler=optuna.samplers.TPESampler(seed=seed),\n        pruner=optuna.pruners.MedianPruner(n_startup_trials=3),\n    )\n    remaining_trials = max(0, N_TRIALS - len(study.trials))\n    if remaining_trials:\n        study.optimize(\n            make_objective(seed), n_trials=remaining_trials,\n            timeout=180 if FAST_MODE else 900,\n        )\n    persist_study(study, config)\n    return study\n\n\nstudy = run_study(SEED)\nbest_trial = study.best_trial\nprint(\"best CV log loss:\", round(study.best_value, 4))\ndisplay(pd.Series({\n    \"best_cv_log_loss\": study.best_value,\n    \"fold_log_loss_std\": best_trial.user_attrs.get(\"fold_log_loss_std\"),\n    \"mean_best_iterations\": best_trial.user_attrs.get(\"mean_best_iterations\"),\n    \"std_best_iterations\": best_trial.user_attrs.get(\"std_best_iterations\"),\n}, name=\"primary study\"))\ndisplay(pd.Series(study.best_params, name=\"best parameter\"))"),
+        md("## Repeated-seed stability audit\n\nThe primary study is repeated with two additional seeds in fast mode. This shows whether the selected score and parameters are sensitive to the sampler, fold assignment, and CatBoost randomness.\n\nThis is a stability check, not an unbiased estimate of tuning performance. Nested cross-validation is still required when the tuning-performance estimate itself must be unbiased."),
+        code("if RUN_STABILITY_AUDIT:\n    stability_studies = {seed: run_study(seed) for seed in STABILITY_SEEDS}\n    stability_rows = [{\n        \"seed\": seed,\n        \"best_cv_log_loss\": run.best_value,\n        \"fold_log_loss_std\": run.best_trial.user_attrs.get(\"fold_log_loss_std\"),\n        \"depth\": run.best_params.get(\"depth\"),\n        \"learning_rate\": run.best_params.get(\"learning_rate\"),\n        \"mean_best_iterations\": run.best_trial.user_attrs.get(\"mean_best_iterations\"),\n    } for seed, run in [(SEED, study), *stability_studies.items()]]\n    stability_summary = pd.DataFrame(stability_rows).sort_values(\"seed\")\nelse:\n    stability_summary = pd.DataFrame({\n        \"status\": [\"disabled; set RUN_STABILITY_AUDIT=1 to repeat the study\"],\n    })\nstability_summary"),
+        md("### Search-space concepts\n\nThe bounds encode assumptions about model capacity and regularization:\n\n| Parameter | Concept |\n|---|---|\n| `learning_rate` | Smaller updates often need more trees; logarithmic search is appropriate. |\n| `depth` | Controls interaction complexity and overfitting risk. |\n| `min_data_in_leaf` | Prevents overly specific leaves. |\n| `subsample`, `rsm` | Row and feature sampling that can reduce variance. |\n| `l2_leaf_reg` | Penalizes large leaf values. |\n| `random_strength` | Adds randomness to CatBoost split selection. |\n\nThe search budget is part of the experiment. Eight or twenty-five trials identify the best observed configuration under this bounded search; they do not prove global optimality.\n\n### Categorical representation decision\n\nThis notebook uses leakage-safe one-hot encoding because it keeps preprocessing explicit and the feature matrix easy to inspect. CatBoost also supports native categorical features; native encoding should be tested separately for high-cardinality data because it may provide a better representation. The choice is recorded in the experiment configuration rather than treated as universally optimal.\n"),
+        md("## 5. Inspect trials without overinterpreting them\n\nTrial history helps answer:\n\n- Did later trials improve over earlier trials?\n- Were many trials pruned?\n- Is the improvement large enough to matter?\n- Is the result stable across seeds or fold assignments?\n\nPruned trials contain partial evidence and should not be interpreted as completed final scores. The best CV score is also optimistically selected because it is the minimum among many adaptive experiments.\n"),
+        code("trials = study.trials_dataframe(attrs=(\"number\", \"value\", \"state\", \"params\", \"duration\"))\ntrials[\"fold_log_loss_std\"] = [\n    trial.user_attrs.get(\"fold_log_loss_std\", np.nan) for trial in study.trials\n]\ntrials = trials.sort_values(\"value\", ascending=True, na_position=\"last\")\ndisplay(trials.head(10))"),
+        md("### Parameter importance is study-specific\n\nOptuna parameter importance describes which parameters explain performance differences among these trials, under this dataset, search space, sampler, and budget.\n\nIt is a diagnostic—not a universal ranking, a causal effect, or a guarantee that the same parameter will matter in production.\n"),
+        code("try:\n    importances = optuna.importance.get_param_importances(study)\n    importance_frame = (\n        pd.Series(importances, name=\"importance\")\n        .rename_axis(\"parameter\")\n        .reset_index()\n        .sort_values(\"importance\", ascending=False)\n    )\n    display(importance_frame)\nexcept Exception as exc:\n    print(f\"Parameter importance skipped: {exc}\")\n"),
+        md("## 6. Promote one candidate to validation\n\nThe baseline and tuned models now select their iteration counts using development data only. They are then refit on all development rows without an evaluation set. Validation is used once for the finalized comparison, not for early stopping.\n\nThe primary study is persisted and can be resumed without adding duplicate trials. A repeated-seed stability audit runs in fast mode by default; set RUN_STABILITY_AUDIT=1 in full mode when the extra compute is justified. For an unbiased estimate of tuning performance, use nested cross-validation."),
+        md("## 6a. Final development refit\n\nThe selected iteration count comes from development CV. The final model is refit on all development rows without an evaluation set, so validation is used only for the one-time finalist comparison below."),
+        code("tuned_iterations = int(np.clip(\n    round(best_trial.user_attrs.get(\"mean_best_iterations\", MAX_ITERATIONS)),\n    1, MAX_ITERATIONS,\n))\ntuned_params = {\n    **study.best_params, \"loss_function\": \"Logloss\", \"eval_metric\": \"Logloss\",\n    \"thread_count\": -1, \"random_seed\": SEED, \"iterations\": tuned_iterations,\n    \"allow_writing_files\": False, \"verbose\": False, \"bootstrap_type\": \"Bernoulli\",\n}\ntuned = CatBoostClassifier(**tuned_params)\ntuned.fit(X_dev_encoded, y_dev, verbose=False)\ntuned_p = tuned.predict_proba(X_val_encoded)[:, 1]\nvalidation_comparison = pd.DataFrame({\n    \"untuned CatBoost\": classification_metrics(y_val, cat_p),\n    \"Optuna CatBoost\": classification_metrics(y_val, tuned_p),\n}).T\nprint({\"baseline_iterations\": baseline_iterations, \"tuned_iterations\": tuned_iterations})\nfinal_report = {\n    \"study_name\": study.study_name,\n    \"dataset_sha256\": BASE_CONFIG[\"dataset_sha256\"],\n    \"baseline_iterations\": baseline_iterations,\n    \"tuned_iterations\": tuned_iterations,\n    \"validation\": json.loads(validation_comparison.to_json(orient=\"index\")),\n}\nwrite_json(final_report, ARTIFACT_DIR / f\"{study.study_name}_final_comparison.json\")\nvalidation_comparison"),
+        md("## 7. Senior-level interpretation\n\nBefore adopting the tuned model, ask:\n\n- Did it beat the baseline by more than fold and seed variation?\n- Is the chosen metric aligned with the business decision?\n- Are probabilities calibrated well enough for downstream use?\n- Are the features available at prediction time?\n- Would nested cross-validation change the conclusion?\n\nThe notebook writes the dataset hash, environment metadata, configuration, SQLite study, trial CSV, and final validation comparison under reports/optuna_04/. These artifacts make the result auditable and reproducible.\n\nThe correct conclusion may be that tuning did not produce a meaningful improvement. Additional complexity is justified only when it improves reliable, decision-relevant performance."),
+        md("## Common mistakes and leakage warnings\n\n- Letting the objective read validation or test rows.\n- Fitting an encoder before the cross-validation split.\n- Treating the best trial as an unbiased estimate after searching many trials.\n- Using the validation set repeatedly to tune the search space or threshold.\n- Writing Optuna artifacts into version control instead of the ignored reports directory.\n\n## Exercises\n\n1. Replace the single development split used for early stopping with nested cross-validation and compare the estimate.\n2. Add a calibration check for the promoted candidate without opening the test set.\n3. **Challenge:** design a study budget and promotion rule that includes both score uncertainty and operational complexity.\n\n## Summary\n\nOptuna is an adaptive model-selection process. A trustworthy study keeps preprocessing, early stopping, and scoring inside development folds, uses validation only for a limited finalist comparison, and leaves the test set sealed until the workflow is frozen.\n\n## References\n\n- [Optuna documentation](https://optuna.readthedocs.io/en/stable/)\n- [scikit-learn nested versus non-nested cross-validation](https://scikit-learn.org/stable/auto_examples/model_selection/plot_nested_cross_validation_iris.html)\n- [CatBoost parameter tuning](https://catboost.ai/docs/en/concepts/parameter-tuning)\n"),
+    ]
 def n05() -> list[dict]:
     """Build notebook 05: ensemble learning."""
     return [

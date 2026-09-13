@@ -1,11 +1,52 @@
+# Operating-system and tool metadata
+.DS_Store
+.ruff_cache/
+.ipynb_checkpoints/
+
+# Python environments and caches
 .venv/
 __pycache__/
 *.py[cod]
-.ipynb_checkpoints/
+
+# Local/generated course outputs
 data/raw/*
 !data/raw/.gitkeep
+data/processed/
+data/external/
 models/*
 !models/.gitkeep
 reports/*
 !reports/.gitkeep
 
+# Data files and compressed exports
+*.csv
+*.parquet
+*.feather
+*.xlsx
+*.json.gz
+*.zip
+
+# Models and experiment tracking
+*.pkl
+*.joblib
+*.pt
+*.pth
+*.h5
+*.onnx
+*.safetensors
+mlruns/
+.dvc/tmp/
+wandb/
+
+# Local environment files
+.env
+*.env
+
+# Optional visual assets are kept locally and are not published to GitHub.
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.webp
+*.svg
+*.ico

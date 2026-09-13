@@ -1,0 +1,50 @@
+{"kind":"deck","id":"pr/gywm72","name":"Deck"}
+{"kind":"layout","layoutId":"82207def-e9fa-4d26-a13f-a158b8fc73aa","name":"Master","type":"master"}
+{"kind":"layout","layoutId":"8a404267-6f71-4667-bfca-0967e9211981","name":"Title Slide","type":"title"}
+{"kind":"slide","id":"sl/ncr2wa","slide":1,"title":"THE JOURNEY FROM","textShapes":31}
+{"kind":"shape","id":"sh/knqpczix","slide":1,"bbox":[0,0,1280,720]}
+{"kind":"shape","id":"sh/lozqlkzi","slide":1,"bbox":[0,0,1280,92]}
+{"kind":"textbox","id":"sh/6p87ep03","slide":1,"text":"THE JOURNEY FROM","textPreview":"THE JOURNEY FROM","textChars":16,"textLines":1,"bbox":[52,14,314,34]}
+{"kind":"textbox","id":"sh/7qh8nuho","slide":1,"text":"PREDICTION","textPreview":"PREDICTION","textChars":10,"textLines":1,"bbox":[360,14,190,34]}
+{"kind":"textbox","id":"sh/8rqpgzit","slide":1,"text":"TO","textPreview":"TO","textChars":2,"textLines":1,"bbox":[555,14,50,34]}
+{"kind":"textbox","id":"sh/tsjqp4ze","slide":1,"text":"CAUSAL INFERENCE","textPreview":"CAUSAL INFERENCE","textChars":16,"textLines":1,"bbox":[610,14,370,34]}
+{"kind":"textbox","id":"sh/uts7i9gz","slide":1,"text":"From “What will happen?” to “What if we act?”","textPreview":"From “What will happen?” to “What if we act?”","textChars":45,"textLines":1,"bbox":[343,52,600,25]}
+{"kind":"shape","id":"sh/vu18rehk","slide":1,"bbox":[45,112,320,380]}
+{"kind":"textbox","id":"sh/nyhknmpg","slide":1,"text":"STAGE 1  •  PREDICTION MINDSET","textPreview":"STAGE 1  •  PREDICTION MINDSET","textChars":30,"textLines":1,"bbox":[65,131,278,24]}
+{"kind":"textbox","id":"sh/mx8jeh8v","slide":1,"text":"What will happen?","textPreview":"What will happen?","textChars":17,"textLines":1,"bbox":[65,166,278,34]}
+{"kind":"textbox","id":"sh/90j2pw7m","slide":1,"text":"Observe the travellers already moving through the station.","textPreview":"Observe the travellers already moving through the station.","textChars":58,"textLines":1,"bbox":[75,207,258,45]}
+{"kind":"textbox","id":"sh/oza1grq1","slide":1,"text":"• Learn patterns and correlations\n• Estimate P(Y | X)\n• Rank by probability\n• Optimise predictive accuracy","textPreview":"• Learn patterns and correlations | • Estimate P(Y | X) | • Rank by probability | • Optimise predictive accuracy","textChars":106,"textLines":4,"bbox":[75,280,250,100]}
+{"kind":"shape","id":"sh/zuh0jmpk","slide":1,"bbox":[80,398,240,0]}
+{"kind":"textbox","id":"sh/et8jah8z","slide":1,"text":"LIMITATION","textPreview":"LIMITATION","textChars":10,"textLines":1,"bbox":[75,413,120,20]}
+{"kind":"textbox","id":"sh/1wz2lw7a","slide":1,"text":"A high-probability outcome may have happened anyway.","textPreview":"A high-probability outcome may have happened anyway.","textChars":52,"textLines":1,"bbox":[75,440,255,42]}
+{"kind":"shape","id":"sh/0vq1crq5","slide":1,"bbox":[915,112,320,380]}
+{"kind":"textbox","id":"sh/jq1kv6po","slide":1,"text":"STAGE 2  •  CAUSAL MINDSET","textPreview":"STAGE 2  •  CAUSAL MINDSET","textChars":26,"textLines":1,"bbox":[935,131,278,24]}
+{"kind":"textbox","id":"sh/ipsjm183","slide":1,"text":"What if we act?","textPreview":"What if we act?","textChars":15,"textLines":1,"bbox":[935,166,278,34]}
+{"kind":"textbox","id":"sh/ulwnu5sb","slide":1,"text":"Move the switch - then ask what changed because of the intervention.","textPreview":"Move the switch - then ask what changed because of the intervention.","textChars":68,"textLines":1,"bbox":[945,207,258,45]}
+{"kind":"textbox","id":"sh/fm54na9w","slide":1,"text":"• Estimate treatment effect\n• Compare two possible paths\n• Use experiments and causal methods\n• Optimise incremental value","textPreview":"• Estimate treatment effect | • Compare two possible paths | • Use experiments and causal methods | • Optimise incremental value","textChars":122,"textLines":4,"bbox":[945,280,250,100]}
+{"kind":"shape","id":"sh/gne5wfah","slide":1,"bbox":[950,398,240,0]}
+{"kind":"textbox","id":"sh/honmpkr2","slide":1,"text":"THE QUESTION","textPreview":"THE QUESTION","textChars":12,"textLines":1,"bbox":[945,413,120,20]}
+{"kind":"textbox","id":"sh/2pwnypsn","slide":1,"text":"Which traveller boards because we moved the switch?","textPreview":"Which traveller boards because we moved the switch?","textChars":51,"textLines":1,"bbox":[945,440,255,42]}
+{"kind":"shape","id":"sh/3qp4ru9s","slide":1,"bbox":[430,125,420,98]}
+{"kind":"textbox","id":"sh/4ry50zad","slide":1,"text":"THE DECISION MOMENT","textPreview":"THE DECISION MOMENT","textChars":19,"textLines":1,"bbox":[450,141,380,18]}
+{"kind":"textbox","id":"sh/ps7mtkry","slide":1,"text":"Intervention changes the route","textPreview":"Intervention changes the route","textChars":30,"textLines":1,"bbox":[450,165,380,31]}
+{"kind":"textbox","id":"sh/itc3mls3","slide":1,"text":"P(Y | do(T=1), X) − P(Y | do(T=0), X)","textPreview":"P(Y | do(T=1), X) − P(Y | do(T=0), X)","textChars":37,"textLines":1,"bbox":[450,199,380,18]}
+{"kind":"shape","id":"sh/jul4fq9o","slide":1,"bbox":[408,410,464,95]}
+{"kind":"textbox","id":"sh/18rqlob6","slide":1,"text":"THE AHA MOMENT","textPreview":"THE AHA MOMENT","textChars":14,"textLines":1,"bbox":[428,425,424,18]}
+{"kind":"textbox","id":"sh/0nips3ul","slide":1,"text":"Do not target who will convert.\nTarget who converts because of us.","textPreview":"Do not target who will convert. | Target who converts because of us.","textChars":66,"textLines":2,"bbox":[428,448,424,48]}
+{"kind":"shape","id":"sh/zm98jyt0","slide":1,"bbox":[0,536,1280,184]}
+{"kind":"textbox","id":"sh/el07qtcv","slide":1,"text":"FOUR POSSIBLE FATES AT THE SWITCH","textPreview":"FOUR POSSIBLE FATES AT THE SWITCH","textChars":33,"textLines":1,"bbox":[52,551,310,20]}
+{"kind":"shape","id":"sh/9cbqp8bi","slide":1,"bbox":[52,583,270,100]}
+{"kind":"textbox","id":"sh/ob2pw3ux","slide":1,"text":"SURE THINGS","textPreview":"SURE THINGS","textChars":11,"textLines":1,"bbox":[67,596,240,19]}
+{"kind":"textbox","id":"sh/nat8nytc","slide":1,"text":"They board either way.","textPreview":"They board either way.","textChars":22,"textLines":1,"bbox":[72,625,230,38]}
+{"kind":"shape","id":"sh/m9k7utcr","slide":1,"bbox":[345,583,270,100]}
+{"kind":"textbox","id":"sh/pg76d4by","slide":1,"text":"PERSUADABLES","textPreview":"PERSUADABLES","textChars":12,"textLines":1,"bbox":[360,596,240,19]}
+{"kind":"textbox","id":"sh/4fypkzud","slide":1,"text":"The hidden bright route.","textPreview":"The hidden bright route.","textChars":24,"textLines":1,"bbox":[365,625,230,38]}
+{"kind":"shape","id":"sh/snq18bid","slide":1,"bbox":[638,583,270,100]}
+{"kind":"textbox","id":"sh/toz2hgzy","slide":1,"text":"LOST CAUSES","textPreview":"LOST CAUSES","textChars":11,"textLines":1,"bbox":[653,596,240,19]}
+{"kind":"textbox","id":"sh/6loj6107","slide":1,"text":"No route reaches them.","textPreview":"No route reaches them.","textChars":22,"textLines":1,"bbox":[658,625,230,38]}
+{"kind":"shape","id":"sh/rmhkf6hs","slide":1,"bbox":[931,583,270,100]}
+{"kind":"textbox","id":"sh/4j614rih","slide":1,"text":"DO-NOT-DISTURBS","textPreview":"DO-NOT-DISTURBS","textChars":15,"textLines":1,"bbox":[946,596,240,19]}
+{"kind":"textbox","id":"sh/5kfidwzm","slide":1,"text":"Intervention worsens the outcome.","textPreview":"Intervention worsens the outcome.","textChars":33,"textLines":1,"bbox":[951,625,230,38]}
+{"kind":"image","id":"im/ah4jq1sf","slide":1,"name":"","alt":"Victorian railway station with four causal paths","bbox":[0,0,1280,720]}
+{"kind":"notes","id":"nt/ncr2wa","slide":1,"text":""}
